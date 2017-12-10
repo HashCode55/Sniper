@@ -12,7 +12,7 @@ import os
 
 from .constants import variables 
 from .helper import Parser
-from .errors import NotImplementedError
+from .errors import NotImplementedError, SniperError
 
 @click.group()
 def sniper():
@@ -32,20 +32,32 @@ def sniper():
     pass
 
 @sniper.command()
-@click.argument('snippet')                              
-def new(snippet):
+@click.option('-q', type=bool, default=False)
+def new(q):
     """
     Name of the file you want to create
-    # TODO Implement a quick flag 
     """
-    # prompt the user to create a snippet 
-    snipe = click.edit('NAME:\nDESC:\nCODE:')
-    # parse the input to check for any errors 
-    parser = Parser(snipe)
-    parser.validate_input()
-    # get the map
-    data = parser.create_map()
-    # store the data 
+    data = {}
+    if q == True:
+        name = click.prompt('NAME')        
+        if name.strip() == '':
+            raise SniperError('NAME cannot be empty')
+        desc = click.prompt('DESC')             
+        command = click.prompt('COMMAND')
+        data = {'NAME': name, 'DESC': desc, 'CODE': command}
+    else:    
+        # prompt the user to create a snippet 
+        snipe = click.edit('NAME:\nDESC:\nCODE:')
+        # parse the input to check for any errors 
+        parser = Parser(snipe)
+        parser.validate_input()
+        # get the map
+        data = parser.create_map()
+        print (data)
+    
+    # store the data in the json file 
+    with open(variables['PATH'] + 'data.json', 'w+') as d:
+        json.dump(data, d)
 
 @sniper.command()        
 # @click.argument('snippet')
