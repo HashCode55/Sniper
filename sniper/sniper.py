@@ -9,6 +9,7 @@ import click
 import pickle
 import json
 import os 
+import clipboard
 
 from .constants import variables 
 from .helper import Parser
@@ -51,7 +52,7 @@ def new(q):
         }
     else:    
         # prompt the user to create a snippet 
-        snipe = click.edit('NAME:\nDESC:\nCODE:')
+        snipe = click.edit('NAME :\nDESC :\nCODE :')
         # parse the input to check for any errors 
         parser = Parser(snipe)
         parser.validate_input()
@@ -69,13 +70,25 @@ def new(q):
 
     
 @sniper.command()        
-# @click.argument('snippet')
-def get():
+@click.argument('snippet')
+def get(snippet):
     """
     Use get to extract the snipper 
     Copies to the clipboard 
+
+    params@snippet: Snippet name 
     """
-    raise NotImplementedError('Not implemented')
+    # open the json file 
+    with open(variables['PATH'] + 'data.json') as d:
+        data = json.load(d)
+    # check if the given name exists 
+    if not snippet in data.keys():
+        raise SniperError('No snipped exists with the name: ' + snippet)         
+    try:    
+        clipboard.copy(data[snippet]['CODE'])
+    except SniperError:
+        raise SniperError('Failed to copy to clipboard.')
+    click.echo('Code successfully copied to clipboard.')    
 
 @sniper.command()
 def find():
