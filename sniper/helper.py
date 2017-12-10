@@ -128,9 +128,10 @@ class Parser(object):
 
         # create the map 
         store = {
-            'NAME': name,
-            'DESC': desc,
-            'CODE': code
+            name: {
+                'DESC': desc,
+                'CODE': code
+            }
         }     
 
         return store

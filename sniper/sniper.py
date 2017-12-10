@@ -44,7 +44,11 @@ def new(q):
             raise SniperError('NAME cannot be empty')
         desc = click.prompt('DESC')             
         command = click.prompt('COMMAND')
-        data = {'NAME': name, 'DESC': desc, 'CODE': command}
+        data = {
+            name: {
+                'DESC': desc, 'CODE': command                    
+            } 
+        }
     else:    
         # prompt the user to create a snippet 
         snipe = click.edit('NAME:\nDESC:\nCODE:')
@@ -52,19 +56,31 @@ def new(q):
         parser = Parser(snipe)
         parser.validate_input()
         # get the map
-        data = parser.create_map()
-        print (data)
+        data = parser.create_map()        
     
-    # store the data in the json file 
+    # open the default store 
+    with open(variables['PATH'] + 'data.json') as d:
+        load = json.load(d)
+    # update the store     
+    load.update(data)    
+    # store the data 
     with open(variables['PATH'] + 'data.json', 'w+') as d:
-        json.dump(data, d)
+        json.dump(load, d)
 
+    
 @sniper.command()        
 # @click.argument('snippet')
 def get():
     """
     Use get to extract the snipper 
     Copies to the clipboard 
+    """
+    raise NotImplementedError('Not implemented')
+
+@sniper.command()
+def find():
+    """
+    Find the snippet
     """
     raise NotImplementedError('Not implemented')
 
