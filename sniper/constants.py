@@ -4,8 +4,7 @@ Contains the constants duh.
 
 import os 
 
-variables = {
-    'HOME': os.environ['HOME'],
-    'DIRECTORY_NAME': '.sniper',
-    'PATH': os.environ['HOME'] + '/.sniper/',    
-}
+HOME  = os.environ['HOME']
+DIRECTORY_NAME = '.sniper'
+PATH = HOME + '/' + DIRECTORY_NAME + '/'
+STORE = PATH + 'data.json'

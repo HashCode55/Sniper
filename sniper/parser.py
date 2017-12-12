@@ -97,6 +97,7 @@ class Parser(object):
         else:
             raise ParserError('Bad Syntax. ":" missing in NAME field.')
         name = '\n'.join(snippet_split[name_sind:self.name_eindex+1])
+        name = name.strip()
         # check if it is empty 
         if name == '':
             raise ParserError('NAME fielf cannot be empty')

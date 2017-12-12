@@ -11,8 +11,8 @@ import json
 import os 
 import clipboard
 
-from .constants import variables 
-from .helper import Parser
+from .utilities import open_store, save_store
+from .parser import Parser
 from .errors import NotImplementedError, SniperError
 
 @click.group()
@@ -40,8 +40,9 @@ def new(q):
     """
     data = {}
     if q == True:
-        name = click.prompt('NAME')        
-        if name.strip() == '':
+        name = click.prompt('NAME')   
+        name = name.strip()     
+        if name == '':
             raise SniperError('NAME cannot be empty')
         desc = click.prompt('DESC')             
         command = click.prompt('COMMAND')
@@ -60,14 +61,11 @@ def new(q):
         data = parser.create_map()        
     
     # open the default store 
-    with open(variables['PATH'] + 'data.json') as d:
-        load = json.load(d)
+    load = open_store()    
     # update the store     
     load.update(data)    
     # store the data 
-    with open(variables['PATH'] + 'data.json', 'w+') as d:
-        json.dump(load, d)
-
+    save_store(load)
     
 @sniper.command()        
 @click.argument('snippet')
@@ -79,8 +77,7 @@ def get(snippet):
     params@snippet: Snippet name 
     """
     # open the json file 
-    with open(variables['PATH'] + 'data.json') as d:
-        data = json.load(d)
+    data = open_store()
     # check if the given name exists 
     if not snippet in data.keys():
         raise SniperError('No snipped exists with the name: ' + snippet)         
@@ -90,6 +87,69 @@ def get(snippet):
         raise SniperError('Failed to copy to clipboard.')
     click.echo('Code successfully copied to clipboard.')    
 
+
+@sniper.command()
+@click.argument('snippet')
+def rm(snippet):
+    """
+    Remove a snippet from the store 
+
+    params@snippet: Snippet name 
+    """    
+    # open the json file 
+    data = open_store()
+    # check if the snippet exists in keys 
+    if not snippet in data.keys():
+        raise SniperError('No snipped exists with the name: ' + snippet)         
+    else:
+        data.pop(snippet)                       
+    # save the new dict     
+    save_store(data)
+    click.echo('Snippet successfully deleted.')    
+
+@sniper.command()
+def ls():
+    """
+    List the snippets pretty printing the name and desc of the 
+    stored snippets  
+    """    
+    # load the data 
+    data = open_store()
+    # TODO check for errors here     
+    name_h, desc_h = 'NAME', 'DESC'
+    click.echo(name_h.ljust(30) + desc_h.ljust(30))    
+    click.echo('-'*60)  
+    for name, dat in data.items():
+        name = name.ljust(30)
+        dat = dat['DESC'].ljust(30)
+        click.echo(name + dat)                
+
+@sniper.command()
+@click.argument('snippet')
+def cat(snippet):
+    """
+    Displaying the command 
+    """
+    data = open_store()        
+    # check if the snippet exists in keys 
+    if not snippet in data.keys():
+        raise SniperError('No snipped exists with the name: ' + snippet)         
+    else:
+        click.echo(data[snippet]['CODE'])
+
+@sniper.command()
+@click.argument('snippet')
+def edit(snippet):
+    """
+    For editing the snippet 
+    """    
+    data = open_store()        
+    # check if the snippet exists in keys 
+    if not snippet in data.keys():
+        raise SniperError('No snipped exists with the name: ' + snippet)         
+    # take the input parse it again and save a new file     
+    click.edit('NAME : ' + snippet )    
+
 @sniper.command()
 def find():
     """
@@ -98,30 +158,9 @@ def find():
     raise NotImplementedError('Not implemented')
 
 @sniper.command()
-def rm():
+def run():
     """
-    Remove a snippet 
-    """    
-    raise NotImplementedError('Not implemented')
-
-@sniper.command()
-def ls():
-    """
-    List the snippets 
-    """    
-    raise NotImplementedError('Not implemented')
-
-@sniper.command()
-def edit():
-    """
-    For editing the snippet 
-    """    
-    raise NotImplementedError('Not implemented')
-
-@sniper.command()
-def cat():
-    """
-    Displaying the command 
+    Executes the command stored with exec flag 
     """
     raise NotImplementedError('Not implemented')
 
@@ -145,7 +184,4 @@ def shoot():
     Code is incomplete without Easter Eggs
     """
     raise NotImplementedError('Not implemented')
-
-
-
 

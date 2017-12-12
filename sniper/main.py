@@ -9,21 +9,21 @@ date  : 09/12/2017
 import os 
 import json
 from .sniper import sniper
-from .constants import variables
+from .constants import PATH, STORE
 
 def run (): 
     """
     Create a config file or ignore if it's 
     """            
     # check if there is a directory         
-    if not os.path.exists(variables['PATH']):
+    if not os.path.exists(PATH):
         print ('made a directort')
-        os.makedirs(variables['PATH'])                    
+        os.makedirs(PATH)                    
     # check the data file 
-    if not os.path.isfile(variables['PATH'] + '/' + 'data.json'):
-        file = open(variables['PATH'] + '/' + 'data.json', 'a')
+    if not os.path.isfile(STORE):
+        file = open(STORE, 'a')
         file.close()
-        with open(variables['PATH'] + 'data.json', 'w+') as d:
+        with open(STORE, 'w+') as d:
             json.dump({}, d)    
     # TODO    
     # check if config file exists 
