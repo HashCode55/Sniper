@@ -11,31 +11,28 @@ import json
 import os 
 import clipboard
 
+from fuzzywuzzy import process
+
 from .utilities import open_store, save_store
 from .parser import Parser
 from .errors import NotImplementedError, SniperError
 
 # TODO Make an exec flag 
+# TODO Make find realtime
+# TODO Change editor functionality 
+# TODO Tests 
+# TODO name should include multiple words 
 
 @click.group()
 def sniper():
     """
     Sniper is a simple snippet manager which increases your productivity
     by saving your most used snippets and giving an easy interface to extract them as well
-
-    - Create a new snippet\n
-        sniper new snippet
-    - Extract a snippet\n 
-        snipet get snippet
-    - Remove a snippet 
-        sniper rm snippet 
-    - List snippets 
-        sniper ls              
     """
     pass
 
 @sniper.command()
-@click.option('-q', type=bool, default=False)
+@click.option('-q', is_flag = True)
 def new(q):
     """
     Name of the file you want to create
@@ -48,6 +45,9 @@ def new(q):
             raise SniperError('NAME cannot be empty')
         desc = click.prompt('DESC')             
         command = click.prompt('COMMAND')
+        name = name.strip()
+        desc = desc.strip()
+        code = command.strip()
         data = {
             name: {
                 'DESC': desc, 'CODE': command                    
@@ -59,8 +59,8 @@ def new(q):
         # parse the input to check for any errors 
         parser = Parser(snipe)
         parser.validate_input()
-        # get the map
-        data = parser.create_map()        
+        # get the map        
+        data = parser.create_map()                
     
     # open the default store 
     load = open_store()    
@@ -117,6 +117,9 @@ def ls():
     """    
     # load the data 
     data = open_store()
+    if len(data) == 0:
+        click.echo('No snippets stored. Use "snippet new" to create a new snippet')
+        return 
     # TODO check for errors here     
     name_h, desc_h = 'NAME', 'DESC'
     click.echo(name_h.ljust(30) + desc_h.ljust(30))    
@@ -158,22 +161,63 @@ def edit(snippet):
     # validate the input 
     parser.validate_input()
     # get the map
-    data = parser.create_map()        
+    new_data = parser.create_map()        
+    # update the original dic 
+    data.update(new_data)
     # store the new data back 
     save_store(data)
+    click.echo('Snippet successfully edited.')    
+
 
 @sniper.command()
-def find():
+@click.argument('query')
+def find(query):
     """
     Find the snippet
+    """                                       
+    # give preference to the name first 
+    data = open_store()
+    names = list(data.keys())
+    # get the result 
+    result = process.extract(query, names)
+    # now do the same based on description 
+    descriptions = {nest['DESC']:name for name, nest in data.items()}
+    # update the result 
+    result.extend(process.extract(query, list(descriptions.keys())))        
+    result.sort(key = lambda x: x[1], reverse=True)
+    # now simply print the first 5 results 
+    click.echo("These are the top five matching results: \n\n")
+    name_h, desc_h = 'NAME', 'DESC'
+    click.echo(name_h.ljust(30) + desc_h.ljust(30))    
+    click.echo('-'*60)     
+    
+    result = list(set(result))     
+    result = result[:5]
+    for res, _ in result:        
+        if res in data.keys():
+            name = res 
+            dat = data[name]['DESC']
+        else:
+            name = descriptions[res]
+            dat = res
+        name = name.ljust(30)
+        dat = dat.ljust(30)    
+        click.echo(name + dat)    
+
+@sniper.command()
+def reset():
     """
-    raise NotImplementedError('Not implemented')
+    Removes all the snippets 
+    """
+    click.confirm('Are you sure you want to remove all the snippets?')
+    save_store({})
+    click.echo('Successfully deleted.')
 
 @sniper.command()
 def run():
     """
     Executes the command stored with exec flag 
-    """
+    """    
     raise NotImplementedError('Not implemented')
 
 @sniper.command()

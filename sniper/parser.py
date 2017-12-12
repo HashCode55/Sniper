@@ -69,6 +69,7 @@ class Parser(object):
             if (line.startswith('CODE')): 
                 self.desc_eindex = index - 1
                 break 
+            index += 1
         if index == num_of_lines:
             raise ParserError('Error Parsing the input. CODE field not present\n')        
         # set the code section start index 
@@ -96,8 +97,7 @@ class Parser(object):
             snippet_split[name_sind] = snippet_split[name_sind].lstrip(':')
         else:
             raise ParserError('Bad Syntax. ":" missing in NAME field.')
-        name = '\n'.join(snippet_split[name_sind:self.name_eindex+1])
-        name = name.strip()
+        name = '\n'.join(snippet_split[name_sind:self.name_eindex+1])                
         # check if it is empty 
         if name == '':
             raise ParserError('NAME fielf cannot be empty')
@@ -126,7 +126,10 @@ class Parser(object):
             raise ParserError('Bad Syntax. ":" missing in CODE field.')
         code = '\n'.join(snippet_split[code_sind:self.code_eindex+1])
         
-
+        name = name.strip()
+        desc = desc.strip()
+        code = code.strip()
+        
         # create the map 
         store = {
             name: {

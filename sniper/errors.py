@@ -1,3 +1,10 @@
+"""
+Errors for Sniper
+
+author: HashCode55
+data  : 9/12/17
+"""
+
 import sys 
 import inspect 
 

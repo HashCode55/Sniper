@@ -1,5 +1,8 @@
 """
 Contains the constants duh.
+
+author: hashcode55
+date  : 09/12/2017
 """
 
 import os 

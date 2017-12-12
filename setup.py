@@ -11,7 +11,9 @@ setuptools.setup(name='Sniper',
                  url='http://path-to-my-packagename',
                  py_modules=['sniper'],
                  install_requires=[
-                     'Click'
+                     'Click',
+                     'clipboard',
+                     'fuzzywuzzy'
                  ],
                  entry_points='''
                     [console_scripts]
