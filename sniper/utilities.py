@@ -22,5 +22,5 @@ def save_store(data):
 
     params@data: The dict object to be stored 
     """
-    with open(STORE) as d:
+    with open(STORE, 'w+') as d:
         json.dump(data, d) 

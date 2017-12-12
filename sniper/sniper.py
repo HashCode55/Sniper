@@ -15,6 +15,8 @@ from .utilities import open_store, save_store
 from .parser import Parser
 from .errors import NotImplementedError, SniperError
 
+# TODO Make an exec flag 
+
 @click.group()
 def sniper():
     """
@@ -143,12 +145,22 @@ def edit(snippet):
     """
     For editing the snippet 
     """    
+    # get the data 
     data = open_store()        
     # check if the snippet exists in keys 
     if not snippet in data.keys():
         raise SniperError('No snipped exists with the name: ' + snippet)         
-    # take the input parse it again and save a new file     
-    click.edit('NAME : ' + snippet )    
+    # take the input parse it again and save a new file    
+    edit = 'NAME : {}\nDESC : {}\nCODE : {}'.format(snippet, data[snippet]['DESC'], data[snippet]['CODE'])
+    snipe = click.edit(edit)    
+    # parse, check and create     
+    parser = Parser(snipe)
+    # validate the input 
+    parser.validate_input()
+    # get the map
+    data = parser.create_map()        
+    # store the new data back 
+    save_store(data)
 
 @sniper.command()
 def find():
