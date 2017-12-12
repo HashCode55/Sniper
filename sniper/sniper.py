@@ -22,6 +22,10 @@ from .errors import NotImplementedError, SniperError
 # TODO Change editor functionality 
 # TODO Tests 
 # TODO name should include multiple words 
+# TODO formatting of almost everythin 
+# TODO Docs 
+# TODO Server
+# TODO database toggle 
 
 @click.group()
 def sniper():
