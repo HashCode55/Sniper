@@ -26,6 +26,7 @@ from .errors import NotImplementedError, SniperError
 # TODO Docs 
 # TODO Server
 # TODO database toggle 
+# TODO ask for name adnd desc in prompt and else simply 
 
 @click.group()
 def sniper():
@@ -225,16 +226,17 @@ def run():
     raise NotImplementedError('Not implemented')
 
 @sniper.command()
-def share():
+def push():
     """
-    Shareing the note via gist
+    Shareing the note via gist. Requires login. 
     """    
     raise NotImplementedError('Not implemented')
 
 @sniper.command()
-def push():
+def fetch():
     """
-    Push the note to gist 
+    Push the note to gist. 
+    Doesn't require login     
     """    
     raise NotImplementedError('Not implemented')
 
