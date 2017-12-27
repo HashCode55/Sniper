@@ -13,7 +13,9 @@ import (
     "log"
     "net/http"
     "strings"
-    
+    "io"
+    "bytes"
+
     "github.com/dgrijalva/jwt-go"
     "github.com/gorilla/context"
     "github.com/gorilla/mux"
@@ -21,11 +23,16 @@ import (
 
     "gopkg.in/mgo.v2"
     "gopkg.in/mgo.v2/bson"
+
+    "crypto/md5"
+    // "encoding/hex"
+    // "math/rand"
+
 )
 
 type User struct {
-    Username string `json:"username"`
-    Password string `json:"password"`
+    User string `json:"user"`
+    Pass string `json:"pass"`
 }
 
 type JwtToken struct {
@@ -38,6 +45,8 @@ type Exception struct {
 
 type Snippet struct {
     Name string `json:"name"`
+    User string `json:"user"`
+    Private bool `json:"priv"`
     Desc string `json:"desc"`
     Code string `json:"code"`
 }
@@ -45,6 +54,12 @@ type Snippet struct {
 type Response struct {
     Success bool `json:"success"`
     Data Snippet `json:"data"`
+    Err string `json:"err"`
+}
+
+type SignUpResponse struct {
+    Success bool `json:"success"`
+    Token string `json:"token"`
     Err string `json:"err"`
 }
 
@@ -76,70 +91,141 @@ func main() {
     fmt.Println("Starting the application...")
     router.HandleFunc("/push", PushSnippet).Methods("POST")
     router.HandleFunc("/pull", PullSnippet).Methods("GET")
-    router.HandleFunc("/authenticate", CreateTokenEndpoint).Methods("POST")
+    // router.HandleFunc("/authenticate", CreateTokenEndpoint).Methods("POST")
+    router.HandleFunc("/signup", SignUpEndPoint).Methods("POST")
+    router.HandleFunc("/signin", SignInEndPoint).Methods("POST")
     router.HandleFunc("/protected", ProtectedEndpoint).Methods("GET")
     router.HandleFunc("/test", ValidateMiddleware(TestEndpoint)).Methods("GET")
     log.Fatal(http.ListenAndServe(":12345", router))
 }
 
-func CreateTokenEndpoint(w http.ResponseWriter, req *http.Request) {
-	/*
-	This handler will recieve username and password 
-	*/
+func SignUpEndPoint(w http.ResponseWriter, req *http.Request) {
+
     var user User
-	_ = json.NewDecoder(req.Body).Decode(&user)
-	// validate credentials here 	
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-        "username": user.Username,
-        "password": user.Password,
-    })
-    tokenString, error := token.SignedString([]byte("secret"))
-    if error != nil {
-        fmt.Println(error)
+    _ = json.NewDecoder(req.Body).Decode(&user)
+
+    u := session.DB("sniper").C("sniper-users")
+
+    var OldUser User
+    err := u.Find(bson.M{"user": user.User}).One(&OldUser)
+    if err != nil {
+        md5Password := md5.New()
+        io.WriteString(md5Password, user.Pass)
+        buffer := bytes.NewBuffer(nil)
+        fmt.Fprintf(buffer, "%x", md5Password.Sum(nil))
+
+        NewPass := buffer.String()
+
+        fmt.Println(NewPass)
+        NewUser := User{User: user.User, Pass: NewPass}
+        err := u.Insert(&NewUser)
+        if err != nil {
+            //error inserting user
+        } else {
+            token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+                "username": user.User,
+                "password": NewPass,
+            })
+            tokenString, error := token.SignedString([]byte("secret"))
+            if error != nil {
+                fmt.Println(error)
+                json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Error Creating User"})
+            }
+            json.NewEncoder(w).Encode(SignUpResponse{Success: true, Token: tokenString})
+        }
+
+
+    } else {
+        json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Username Already Exists"})
     }
-    json.NewEncoder(w).Encode(JwtToken{Token: tokenString})
+
 }
 
-func ProtectedEndpoint(w http.ResponseWriter, req *http.Request) {
-	/*
-	This is a dummy endpoint. 
-	In reality this is where protected snippets are stored 
-	OR for storing the snippets 
-	*/
-    params := req.URL.Query()
-    token, _ := jwt.Parse(params["token"][0], func(token *jwt.Token) (interface{}, error) {
+func SignInEndPoint(w http.ResponseWriter, req *http.Request) {
+
+    var user User
+    _ = json.NewDecoder(req.Body).Decode(&user)
+
+    u := session.DB("sniper").C("sniper-users")
+
+    var OldUser User
+    err := u.Find(bson.M{"user": user.User}).One(&OldUser)
+    if err != nil {
+        json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Wrong Credentials"})
+    } else {
+        md5Password := md5.New()
+        io.WriteString(md5Password, user.Pass)
+        buffer := bytes.NewBuffer(nil)
+        fmt.Fprintf(buffer, "%x", md5Password.Sum(nil))
+
+        NewPass := buffer.String()
+
+        if NewPass == OldUser.Pass {
+            token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+                "user": user.User,
+                "pass": NewPass,
+            })
+            tokenString, error := token.SignedString([]byte("secret"))
+            if error != nil {
+                fmt.Println(error)
+                json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Error Creating User"})
+            }
+            json.NewEncoder(w).Encode(SignUpResponse{Success: true, Token: tokenString})
+        } else {
+            json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Wrong Credentials"})
+        }
+
+    }
+
+}
+
+
+func PushSnippet(w http.ResponseWriter, req *http.Request) {
+
+    type Data struct {
+        Name string `json:"name"`
+        User string `json:"user"`
+        Private bool `json:"priv"`
+        Desc string `json:"desc"`
+        Code string `json:"code"`
+        Token string `json:"token"`
+    }
+
+    var data Data
+    _ = json.NewDecoder(req.Body).Decode(&data)
+
+    fmt.Println(data)
+
+    token, _ := jwt.Parse(data.Token, func(token *jwt.Token) (interface{}, error) {
         if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
             return nil, fmt.Errorf("There was an error")
         }
         return []byte("secret"), nil
     })
+
     if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
         var user User
         mapstructure.Decode(claims, &user)
-        json.NewEncoder(w).Encode(user)
+        fmt.Println(user)
+
+        snippet := Snippet{Name: data.Name, User: user.User, Private: data.Private, Desc: data.Desc, Code: data.Code}
+
+        c := session.DB("sniper").C("sniper-snippets")
+        err := c.Insert(&snippet)
+
+        // TODO: Check for duplicate snippits before saving
+
+        if err != nil {
+            json.NewEncoder(w).Encode(Response{Success: false, Err: err.Error()})            
+            fmt.Println("Error:", err)
+        } else {
+            json.NewEncoder(w).Encode(Response{Success: true})
+            fmt.Println("Snippet saved")
+        }
     } else {
-        json.NewEncoder(w).Encode(Exception{Message: "Invalid authorization token"})
+        json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token"})
     }
-}
 
-
-
-func PushSnippet(w http.ResponseWriter, req *http.Request) {
-
-    var snippet Snippet
-    _ = json.NewDecoder(req.Body).Decode(&snippet)
-
-    fmt.Println(snippet)
-
-    c := session.DB("sniper").C("sniper-snippets")
-    err := c.Insert(&snippet)
-    if err != nil {
-        json.NewEncoder(w).Encode(Response{Success: false, Err: err.Error()})            
-        fmt.Println("Error:", err)
-    } else {
-        json.NewEncoder(w).Encode(Response{Success: true})
-        log.Println("Snippet saved")
-    }
 }
 
 func PullSnippet(w http.ResponseWriter, req *http.Request) {
@@ -159,6 +245,23 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
     } else {
         fmt.Println("Snippet:", snippet)
         json.NewEncoder(w).Encode(Response{Success: true, Data: snippet})
+    }
+}
+
+func ProtectedEndpoint(w http.ResponseWriter, req *http.Request) {
+    params := req.URL.Query()
+    token, _ := jwt.Parse(params["token"][0], func(token *jwt.Token) (interface{}, error) {
+        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            return nil, fmt.Errorf("There was an error")
+        }
+        return []byte("secret"), nil
+    })
+    if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+        var user User
+        mapstructure.Decode(claims, &user)
+        json.NewEncoder(w).Encode(user)
+    } else {
+        json.NewEncoder(w).Encode(Exception{Message: "Invalid authorization token"})
     }
 }
 
