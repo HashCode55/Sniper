@@ -22,3 +22,9 @@ setuptools.setup(name='Sniper',
                  license='MIT License',
                  zip_safe=False,                 
                  classifiers=['Packages', 'Boilerplate'])
+
+
+
+
+
+

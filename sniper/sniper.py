@@ -15,18 +15,26 @@ from fuzzywuzzy import process
 
 from .utilities import open_store, save_store
 from .parser import Parser
-from .errors import NotImplementedError, SniperError
+from .errors import NotImplementedError, SniperError, ServerError
+from .constants import POST, GET
 
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+
+#### PRIORITY LEVEL - HIGH ####
+# TODO remove parser 
 # TODO Make an exec flag 
-# TODO Make find realtime
-# TODO Change editor functionality 
 # TODO Tests 
-# TODO name should include multiple words 
-# TODO formatting of almost everythin 
 # TODO Docs 
 # TODO Server
-# TODO database toggle 
-# TODO ask for name adnd desc in prompt and else simply 
+
+#### PRIORITY LEVEL - LOW ####
+# TODO formatting of almost everythin 
+# TODO client database toggle 
+# TODO Make find realtime
+# TODO Change editor functionality 
+# TODO name should include multiple words 
 
 @click.group()
 def sniper():
@@ -219,26 +227,67 @@ def reset():
     click.echo('Successfully deleted.')
 
 @sniper.command()
+@click.argument('snippet')
+def push(snippet):
+    """
+    Sharing the note via gist. Requires login. 
+    """    
+    # get the data 
+    data = open_store()                
+    if not snippet in data.keys():
+        raise SniperError('No snipped exists with the name: ' + snippet)
+    # cook the json 
+    jdata = {
+        'name': snippet, 
+        'desc': data[snippet]['DESC'],
+        'code': data[snippet]['CODE']
+    }    
+
+    jdata = json.dumps(jdata).encode('utf8')
+    # send the request 
+    try: 
+        request = Request(POST, data=jdata)                   
+        request.add_header('Content-Type', 'application/json')
+        response = urlopen(request).read().decode('utf-8')
+        # parse the string             
+        response = json.loads(response)
+    except ServerError: 
+        raise ServerError('Couldn\'t connect to server.')                 
+    # check if the response is fine 
+    if (response['success']): 
+        click.echo('Successfully saved on server.')                
+    else:
+        raise ServerError(response['error'])                  
+
+@sniper.command()
+@click.argument('snippet')
+def pull(snippet):
+    """
+    Push the note to gist. 
+    Doesn't require login     
+    """    
+    # cook the get request 
+    try: 
+        getreq = GET + '?name=' + snippet
+        request = Request(getreq)                      
+        response = urlopen(request).read().decode('utf-8')        
+        # parse the string                 
+        response = json.loads(response)
+    except ServerError: 
+        raise ServerError('Couldn\'t connect to server.')                
+    if (response['success']): 
+        click.echo('Successfully pulled from the server.')                
+    else:
+        raise ServerError(response['err'])  
+    print (response)                    
+
+@sniper.command()
 def run():
     """
     Executes the command stored with exec flag 
     """    
     raise NotImplementedError('Not implemented')
-
-@sniper.command()
-def push():
-    """
-    Shareing the note via gist. Requires login. 
-    """    
-    raise NotImplementedError('Not implemented')
-
-@sniper.command()
-def fetch():
-    """
-    Push the note to gist. 
-    Doesn't require login     
-    """    
-    raise NotImplementedError('Not implemented')
+    
 
 @sniper.command()
 def shoot():

@@ -38,3 +38,9 @@ class NotImplementedError(Error):
     Encapsulates error which are root 
     """
     pass
+
+class ServerError(Error):
+    """
+    Server Errors     
+    """
+    pass
