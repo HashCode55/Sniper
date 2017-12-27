@@ -18,7 +18,7 @@ class Error(Exception):
             ln = sys.exc_info()[-1].tb_lineno
         except AttributeError:
             ln = inspect.currentframe().f_back.f_lineno
-        self.args = "{0.__name__} (line {1}): {2}".format(type(self), ln, message),
+        self.args = "{0.__name__} : {1}".format(type(self), message),
         sys.exit(self)
 
 class ParserError(Error):
@@ -44,3 +44,5 @@ class ServerError(Error):
     Server Errors     
     """
     pass
+
+    

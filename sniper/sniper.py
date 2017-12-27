@@ -16,7 +16,7 @@ from fuzzywuzzy import process
 from .utilities import open_store, save_store
 from .parser import Parser
 from .errors import NotImplementedError, SniperError, ServerError
-from .constants import POST, GET
+from .constants import POST_SNIPPET, TOKEN_FILE, SIGNUP, SIGNIN
 
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -228,45 +228,83 @@ def reset():
 
 @sniper.command()
 @click.argument('snippet')
-def push(snippet):
+@click.option('-p', is_flag = True)
+def push(snippet, p):
     """
     Sharing the note via gist. Requires login. 
+    """    
+    # check whether the user has logged in or not 
+    with open(TOKEN_FILE) as t:
+        token = t.read()        
+    if token == '':
+        reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
+            ' an account?')
+        if not reg:
+            # get the username and password 
+            yes = click.confirm('Well! Why not create one? Press y to confirm.')
+            # fuck you, user 
+            if not yes: return 
+            username = click.prompt('Username', type=str)                        
+            password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
+            # sweet password check 
+            if len(password) < 8:
+                while len(password) < 8:
+                    click.echo('Password must be atleast of 8 characters.')
+                    password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
+            res = post({'user': username, 'pass': password}, SIGNUP)                        
+        else: 
+            username = click.prompt('Username', type=str)
+            password = click.prompt('Password', type=str, hide_input=True)
+            res = post({'user': username, 'pass': password}, SIGNIN)
+        
+        if 'token' in res.keys() and res['token'] != '':
+            # store the token 
+            token = res['token']
+            with open(TOKEN_FILE, 'w+') as t:
+                t.write(res['token'] + '\n' + username)
+            click.echo('Signed in.')                
+        else: 
+            raise ServerError('Error signing in.')            
+    else:
+        token = token.split('\n')
+        if len(token) < 2:
+            raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
+        username = token[1]
+        token = token[0]        
+    # get the data 
+    data = open_store()                
+    if not snippet in data.keys():
+        raise SniperError('No snippet exists with the name: ' + snippet)
+    
+    # by default the snippet is public 
+    private = False
+    if p: private = True  
+    
+    # cook the json 
+    jdata = {    
+        'user': username,        
+        'priv': private,
+        'name': snippet, 
+        'desc': data[snippet]['DESC'],
+        'code': data[snippet]['CODE'], 
+        'token': token
+    }    
+    res = post(jdata, POST_SNIPPET)   
+    click.echo('Saved on server.') 
+    
+@sniper.command()
+@click.argument('snippet')
+def pull(snippet):
+    """
+    pull the public snippet 
+    and save it locally 
     """    
     # get the data 
     data = open_store()                
     if not snippet in data.keys():
         raise SniperError('No snipped exists with the name: ' + snippet)
-    # cook the json 
-    jdata = {
-        'name': snippet, 
-        'desc': data[snippet]['DESC'],
-        'code': data[snippet]['CODE']
-    }    
 
-    jdata = json.dumps(jdata).encode('utf8')
-    # send the request 
-    try: 
-        request = Request(POST, data=jdata)                   
-        request.add_header('Content-Type', 'application/json')
-        response = urlopen(request).read().decode('utf-8')
-        # parse the string             
-        response = json.loads(response)
-    except ServerError: 
-        raise ServerError('Couldn\'t connect to server.')                 
-    # check if the response is fine 
-    if (response['success']): 
-        click.echo('Successfully saved on server.')                
-    else:
-        raise ServerError(response['error'])                  
-
-@sniper.command()
-@click.argument('snippet')
-def pull(snippet):
-    """
-    Push the note to gist. 
-    Doesn't require login     
-    """    
-    # cook the get request 
+    # cook the get request and get the snippet from server 
     try: 
         getreq = GET + '?name=' + snippet
         request = Request(getreq)                      
@@ -275,11 +313,30 @@ def pull(snippet):
         response = json.loads(response)
     except ServerError: 
         raise ServerError('Couldn\'t connect to server.')                
-    if (response['success']): 
+    if response['success']: 
         click.echo('Successfully pulled from the server.')                
     else:
         raise ServerError(response['err'])  
+
+    # save the snippet locally     
+    new_data = {
+        response['name']: {
+            'DESC': response['desc'], 
+            'CODE': response['code']
+        }
+    }
+
+
+    data.update(new_data)
     print (response)                    
+
+@sniper.command()
+def signout():
+    """
+    Signout from sniper 
+    """
+    with open(TOKEN_FILE, 'w') as t:
+        t.write('')
 
 @sniper.command()
 def run():
@@ -295,4 +352,23 @@ def shoot():
     Code is incomplete without Easter Eggs
     """
     raise NotImplementedError('Not implemented')
+
+def post(data, url):
+    """
+    Client Post Request  
+    """  
+    data = json.dumps(data).encode('utf8')
+    try: 
+        request = Request(url, data=data)                   
+        request.add_header('Content-Type', 'application/json')
+        response = urlopen(request).read().decode('utf-8')
+        # parse the string             
+        response = json.loads(response)
+    except ServerError: 
+        raise ServerError('Couldn\'t connect to server.') 
+    # check the server response     
+    if not response['success']:             
+        raise ServerError(response['err'])  
+    return response        
+    
 
