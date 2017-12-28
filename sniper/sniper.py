@@ -16,7 +16,7 @@ from fuzzywuzzy import process
 from .utilities import open_store, save_store
 from .parser import Parser
 from .errors import NotImplementedError, SniperError, ServerError
-from .constants import POST_SNIPPET, TOKEN_FILE, SIGNUP, SIGNIN
+from .constants import POST_SNIPPET, TOKEN_FILE, SIGNUP, SIGNIN, PULL_SNIPPET
 
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -232,49 +232,26 @@ def reset():
 def push(snippet, p):
     """
     Sharing the note via gist. Requires login. 
-    """    
-    # check whether the user has logged in or not 
-    with open(TOKEN_FILE) as t:
-        token = t.read()        
-    if token == '':
-        reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
-            ' an account?')
-        if not reg:
-            # get the username and password 
-            yes = click.confirm('Well! Why not create one? Press y to confirm.')
-            # fuck you, user 
-            if not yes: return 
-            username = click.prompt('Username', type=str)                        
-            password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
-            # sweet password check 
-            if len(password) < 8:
-                while len(password) < 8:
-                    click.echo('Password must be atleast of 8 characters.')
-                    password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
-            res = post({'user': username, 'pass': password}, SIGNUP)                        
-        else: 
-            username = click.prompt('Username', type=str)
-            password = click.prompt('Password', type=str, hide_input=True)
-            res = post({'user': username, 'pass': password}, SIGNIN)
-        
-        if 'token' in res.keys() and res['token'] != '':
-            # store the token 
-            token = res['token']
-            with open(TOKEN_FILE, 'w+') as t:
-                t.write(res['token'] + '\n' + username)
-            click.echo('Signed in.')                
-        else: 
-            raise ServerError('Error signing in.')            
-    else:
-        token = token.split('\n')
-        if len(token) < 2:
-            raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
-        username = token[1]
-        token = token[0]        
+    """        
     # get the data 
     data = open_store()                
     if not snippet in data.keys():
         raise SniperError('No snippet exists with the name: ' + snippet)
+    
+    # check whether the user has logged in or not 
+    with open(TOKEN_FILE) as t:
+        token = t.read()        
+    if token == '':        
+        authenticate()                        
+
+    # read again updated     
+    with open(TOKEN_FILE) as t:
+        token = t.read()            
+    token = token.split('\n')
+    if len(token) < 2:
+        raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
+    username = token[1]
+    token = token[0]     
     
     # by default the snippet is public 
     private = False
@@ -294,41 +271,55 @@ def push(snippet, p):
     
 @sniper.command()
 @click.argument('snippet')
-def pull(snippet):
+@click.option('-user', default='', type=str)
+def pull(snippet, user):
     """
     pull the public snippet 
     and save it locally 
     """    
+    # check if the user is specified 
+    if user != '':
+        # simply get the data 
+        req = {
+            'user': user, 
+            'name': snippet,
+            'token': '',             
+        }
+        res = post(req, PULL_SNIPPET)
+    else:            
+        # username is specified 
+        with open(TOKEN_FILE) as t:
+            token = t.read()        
+        if token == '':        
+            authenticate()       
+        # open again to read data after authentication     
+        with open(TOKEN_FILE) as t:
+            token = t.read()                
+        token = token.split('\n')
+        if len(token) < 2:
+            raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
+        username = token[1]
+        token = token[0]                
+        # cook the send the request 
+        req = {
+            'user': username,
+            'name': snippet, 
+            'token': token
+        }        
+        res = post(req, PULL_SNIPPET)
+
     # get the data 
     data = open_store()                
-    if not snippet in data.keys():
-        raise SniperError('No snipped exists with the name: ' + snippet)
-
-    # cook the get request and get the snippet from server 
-    try: 
-        getreq = GET + '?name=' + snippet
-        request = Request(getreq)                      
-        response = urlopen(request).read().decode('utf-8')        
-        # parse the string                 
-        response = json.loads(response)
-    except ServerError: 
-        raise ServerError('Couldn\'t connect to server.')                
-    if response['success']: 
-        click.echo('Successfully pulled from the server.')                
-    else:
-        raise ServerError(response['err'])  
-
     # save the snippet locally     
     new_data = {
-        response['name']: {
-            'DESC': response['desc'], 
-            'CODE': response['code']
+        res['data']['name']: {
+            'DESC': res['data']['desc'], 
+            'CODE': res['data']['code']
         }
     }
-
-
-    data.update(new_data)
-    print (response)                    
+    data.update(new_data)    
+    save_store(data)
+    click.echo('Snippet Successfully Saved.')
 
 @sniper.command()
 def signout():
@@ -337,6 +328,7 @@ def signout():
     """
     with open(TOKEN_FILE, 'w') as t:
         t.write('')
+    click.echo('Successfully signed out.')    
 
 @sniper.command()
 def run():
@@ -352,6 +344,43 @@ def shoot():
     Code is incomplete without Easter Eggs
     """
     raise NotImplementedError('Not implemented')
+
+####################
+# HELPER FUNCTIONS #
+####################
+
+def authenticate():
+    """
+    authenticate  
+    """
+    reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
+            ' an account?')
+    if not reg:
+        # get the username and password 
+        yes = click.confirm('Well! Why not create one? Press y to confirm.')
+        # fuck you, user 
+        if not yes: exit(1) 
+        username = click.prompt('Username', type=str)                        
+        password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
+        # sweet password check 
+        if len(password) < 8:
+            while len(password) < 8:
+                click.echo('Password must be atleast of 8 characters.')
+                password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
+        res = post({'user': username, 'pass': password}, SIGNUP)                        
+    else: 
+        username = click.prompt('Username', type=str)
+        password = click.prompt('Password', type=str, hide_input=True)
+        res = post({'user': username, 'pass': password}, SIGNIN)
+    
+    if 'token' in res.keys() and res['token'] != '':
+        # store the token 
+        token = res['token']
+        with open(TOKEN_FILE, 'w+') as t:
+            t.write(res['token'] + '\n' + username)
+        click.echo('Signed in.')                
+    else: 
+        raise ServerError('Error signing in.')       
 
 def post(data, url):
     """
