@@ -10,26 +10,32 @@ import pickle
 import json
 import os 
 import clipboard
+import subprocess
 
 from fuzzywuzzy import process
 
-from .utilities import open_store, save_store
+from .utilities import open_store, save_store, authenticate, post 
 from .parser import Parser
 from .errors import NotImplementedError, SniperError, ServerError
-from .constants import POST_SNIPPET, TOKEN_FILE, SIGNUP, SIGNIN, PULL_SNIPPET
+from .constants import POST_SNIPPET, TOKEN_FILE, SIGNUP, SIGNIN, PULL_SNIPPET, LJUST
 
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
 #### PRIORITY LEVEL - HIGH ####
-# TODO remove parser 
-# TODO Make an exec flag 
+# TODO[DONE] remove parser, name desc and command in editore  
+# TODO[DONE] ls formatting 
+# TODO[DONE] Edit formatting  
+# TODO[DONE] Find 
+# TODO pushh all pull all 
+# TODO[DONE] Make an exec flag 
 # TODO Tests 
 # TODO Docs 
-# TODO Server
+# TODO Final refactoring 
 
 #### PRIORITY LEVEL - LOW ####
+# TODO storage structure change
 # TODO formatting of almost everythin 
 # TODO client database toggle 
 # TODO Make find realtime
@@ -45,36 +51,28 @@ def sniper():
     pass
 
 @sniper.command()
-@click.option('-q', is_flag = True)
-def new(q):
+@click.option('-e', default=False)
+def new(e):
     """
     Name of the file you want to create
+    includes the exec flag if the command to save can be executed 
     """
-    data = {}
-    if q == True:
-        name = click.prompt('NAME')   
-        name = name.strip()     
-        if name == '':
-            raise SniperError('NAME cannot be empty')
-        desc = click.prompt('DESC')             
-        command = click.prompt('COMMAND')
-        name = name.strip()
-        desc = desc.strip()
-        code = command.strip()
-        data = {
-            name: {
-                'DESC': desc, 'CODE': command                    
-            } 
-        }
-    else:    
-        # prompt the user to create a snippet 
-        snipe = click.edit('NAME :\nDESC :\nCODE :')
-        # parse the input to check for any errors 
-        parser = Parser(snipe)
-        parser.validate_input()
-        # get the map        
-        data = parser.create_map()                
-    
+    data = {}    
+    name = click.prompt('NAME')       
+    if name == '':
+        raise SniperError('NAME cannot be empty')
+    desc = click.prompt('DESC')                 
+    name = name.strip()
+    desc = desc.strip()
+    # take the input through the editor 
+    code = click.edit('')  
+    code.strip()  
+    # cook the data to be saved                 
+    data = {
+        name: {
+            'DESC': desc, 'CODE': code, 'EXEC': e                 
+        } 
+    }
     # open the default store 
     load = open_store()    
     # update the store     
@@ -128,19 +126,25 @@ def ls():
     List the snippets pretty printing the name and desc of the 
     stored snippets  
     """    
-    # load the data 
+    # load the data     
     data = open_store()
     if len(data) == 0:
         click.echo('No snippets stored. Use "snippet new" to create a new snippet')
         return 
-    # TODO check for errors here     
+    # TODO check for errors here   
+    click.echo('Total: ' + str(len(data)))  
     name_h, desc_h = 'NAME', 'DESC'
-    click.echo(name_h.ljust(30) + desc_h.ljust(30))    
-    click.echo('-'*60)  
-    for name, dat in data.items():
-        name = name.ljust(30)
-        dat = dat['DESC'].ljust(30)
-        click.echo(name + dat)                
+    click.echo(name_h.ljust(LJUST) + desc_h.ljust(LJUST))    
+    click.echo('-'*LJUST*2)  
+    for name, content in data.items():
+        # name of snippet 
+        name = name.ljust(LJUST)
+        desc = content['DESC']
+        # format the description     
+        if len(desc) > 25: 
+            desc = desc[:25] + '...'
+        dat = desc.ljust(LJUST)
+        click.echo(name + desc)                
 
 @sniper.command()
 @click.argument('snippet')
@@ -151,7 +155,7 @@ def cat(snippet):
     data = open_store()        
     # check if the snippet exists in keys 
     if not snippet in data.keys():
-        raise SniperError('No snipped exists with the name: ' + snippet)         
+        raise SniperError('No snippet exists with the name: ' + snippet)         
     else:
         click.echo(data[snippet]['CODE'])
 
@@ -166,16 +170,28 @@ def edit(snippet):
     # check if the snippet exists in keys 
     if not snippet in data.keys():
         raise SniperError('No snipped exists with the name: ' + snippet)         
+    
     # take the input parse it again and save a new file    
-    edit = 'NAME : {}\nDESC : {}\nCODE : {}'.format(snippet, data[snippet]['DESC'], data[snippet]['CODE'])
-    snipe = click.edit(edit)    
-    # parse, check and create     
-    parser = Parser(snipe)
-    # validate the input 
-    parser.validate_input()
-    # get the map
-    new_data = parser.create_map()        
-    # update the original dic 
+    new_name = click.prompt('NAME', default=snippet)
+    new_desc = click.prompt('DESC', default=data[snippet]['DESC'])
+    new_exec = click.prompt('EXEC', default=data[snippet]['EXEC'], type=bool)    
+    new_code = click.edit(data[snippet]['CODE'])    
+    new_code = new_code.strip()
+    if new_name == '':
+        new_name = snippet
+    if new_desc == '':
+        new_desc = data[snippet]['DESC']
+    if new_exec == None:
+        new_exec = data[snippet]['EXEC']    
+    new_data = {
+        new_name: {
+            'DESC': new_desc,
+            'CODE': new_code,
+            'EXEC': new_exec
+        }
+    }
+    data.pop(snippet)
+    # remove the old snippet 
     data.update(new_data)
     # store the new data back 
     save_store(data)
@@ -191,40 +207,56 @@ def find(query):
     # give preference to the name first 
     data = open_store()
     names = list(data.keys())
+    # merge key name and description just for searching 
+    # putting it in dit for extraction 
+    content = {(key + ' ' + data[key]['DESC']):key for key in data.keys()}
     # get the result 
-    result = process.extract(query, names)
-    # now do the same based on description 
-    descriptions = {nest['DESC']:name for name, nest in data.items()}
-    # update the result 
-    result.extend(process.extract(query, list(descriptions.keys())))        
-    result.sort(key = lambda x: x[1], reverse=True)
+    result = process.extract(query, content.keys())    
+    # extract
+    result = [(content[data], score) for data, score in result]        
     # now simply print the first 5 results 
-    click.echo("These are the top five matching results: \n\n")
+    click.echo("These are the top five matching results: \n")
     name_h, desc_h = 'NAME', 'DESC'
-    click.echo(name_h.ljust(30) + desc_h.ljust(30))    
-    click.echo('-'*60)     
-    
+    click.echo(name_h.ljust(LJUST) + desc_h.ljust(LJUST))    
+    click.echo('-'*LJUST*2)     
+    # use set to remove duplicate entries     
     result = list(set(result))     
+    result.sort(key = lambda x: x[1], reverse=True)
     result = result[:5]
-    for res, _ in result:        
-        if res in data.keys():
-            name = res 
-            dat = data[name]['DESC']
-        else:
-            name = descriptions[res]
-            dat = res
-        name = name.ljust(30)
-        dat = dat.ljust(30)    
-        click.echo(name + dat)    
+    # print the result     
+    for name, _ in result:                        
+        desc = data[name]['DESC']        
+        name = name.ljust(LJUST)
+        if len(desc) > 25:
+            desc = desc[:25] + '...'
+        desc = desc.ljust(LJUST)    
+        click.echo(name + desc)    
+
+@sniper.command()
+@click.argument('snippet')
+def run(snippet):
+    """
+    Executes the command stored with exec flag 
+
+    """        
+    data = open_store()                
+    if not snippet in data.keys():
+        raise SniperError('No snippet exists with the name: ' + snippet)
+    if not data[snippet]['EXEC']:
+        raise SniperError('Snippet not executable.')
+    exitcode = subprocess.call(data[snippet]['CODE'].split(' '))    
+    if exitcode != 0: 
+        raise SniperError('Error running the snippet.')
 
 @sniper.command()
 def reset():
     """
     Removes all the snippets 
     """
-    click.confirm('Are you sure you want to remove all the snippets?')
-    save_store({})
-    click.echo('Successfully deleted.')
+    res = click.confirm('Are you sure you want to remove all the snippets?')
+    if res:
+        save_store({})
+        click.echo('Successfully deleted.')
 
 @sniper.command()
 @click.argument('snippet')
@@ -267,7 +299,10 @@ def push(snippet, p):
         'token': token
     }    
     res = post(jdata, POST_SNIPPET)   
-    click.echo('Saved on server.') 
+    if 'info' in res.keys():
+        click.echo(res['info'])
+    else:
+        click.echo('Saved on server.') 
     
 @sniper.command()
 @click.argument('snippet')
@@ -322,7 +357,7 @@ def pull(snippet, user):
     click.echo('Snippet Successfully Saved.')
 
 @sniper.command()
-def signout():
+def logout():
     """
     Signout from sniper 
     """
@@ -330,13 +365,6 @@ def signout():
         t.write('')
     click.echo('Successfully signed out.')    
 
-@sniper.command()
-def run():
-    """
-    Executes the command stored with exec flag 
-    """    
-    raise NotImplementedError('Not implemented')
-    
 
 @sniper.command()
 def shoot():
@@ -344,60 +372,3 @@ def shoot():
     Code is incomplete without Easter Eggs
     """
     raise NotImplementedError('Not implemented')
-
-####################
-# HELPER FUNCTIONS #
-####################
-
-def authenticate():
-    """
-    authenticate  
-    """
-    reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
-            ' an account?')
-    if not reg:
-        # get the username and password 
-        yes = click.confirm('Well! Why not create one? Press y to confirm.')
-        # fuck you, user 
-        if not yes: exit(1) 
-        username = click.prompt('Username', type=str)                        
-        password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
-        # sweet password check 
-        if len(password) < 8:
-            while len(password) < 8:
-                click.echo('Password must be atleast of 8 characters.')
-                password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
-        res = post({'user': username, 'pass': password}, SIGNUP)                        
-    else: 
-        username = click.prompt('Username', type=str)
-        password = click.prompt('Password', type=str, hide_input=True)
-        res = post({'user': username, 'pass': password}, SIGNIN)
-    
-    if 'token' in res.keys() and res['token'] != '':
-        # store the token 
-        token = res['token']
-        with open(TOKEN_FILE, 'w+') as t:
-            t.write(res['token'] + '\n' + username)
-        click.echo('Signed in.')                
-    else: 
-        raise ServerError('Error signing in.')       
-
-def post(data, url):
-    """
-    Client Post Request  
-    """  
-    data = json.dumps(data).encode('utf8')
-    try: 
-        request = Request(url, data=data)                   
-        request.add_header('Content-Type', 'application/json')
-        response = urlopen(request).read().decode('utf-8')
-        # parse the string             
-        response = json.loads(response)
-    except ServerError: 
-        raise ServerError('Couldn\'t connect to server.') 
-    # check the server response     
-    if not response['success']:             
-        raise ServerError(response['err'])  
-    return response        
-    
-
