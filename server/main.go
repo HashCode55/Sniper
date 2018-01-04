@@ -14,6 +14,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	// "os"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
@@ -44,6 +46,8 @@ type Snippet struct {
 	Private bool   `json:"priv"`
 	Desc    string `json:"desc"`
 	Code    string `json:"code"`
+	Exec    string `json:"exec"`
+	Time    string `json:"time"`
 }
 
 type Response struct {
@@ -57,6 +61,17 @@ type SignUpResponse struct {
 	Success bool   `json:"success"`
 	Token   string `json:"token"`
 	Err     string `json:"err"`
+}
+
+type Data struct {
+	Name    string `json:"name"`
+	User    string `json:"user"`
+	Private bool   `json:"priv"`
+	Desc    string `json:"desc"`
+	Code    string `json:"code"`
+	Token   string `json:"token"`
+	Exec    string `json:"exec"`
+	Time    string `json:"time"`
 }
 
 func (s *Snippet) String() string {
@@ -88,6 +103,9 @@ func main() {
 	router.HandleFunc("/pull", PullSnippet).Methods("POST")
 	router.HandleFunc("/signup", SignUpEndPoint).Methods("POST")
 	router.HandleFunc("/signin", SignInEndPoint).Methods("POST")
+	router.HandleFunc("/pushall", PushAllEndPoint).Methods("POST")
+	router.HandleFunc("/pullall", PullAllEndPoint).Methods("POST")
+	// log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), router))
 	log.Fatal(http.ListenAndServe(":12345", router))
 }
 
@@ -153,16 +171,10 @@ func SignInEndPoint(w http.ResponseWriter, req *http.Request) {
 
 }
 
+///////////////////////////////
+//////    PUSH LOGIC    ///////
+///////////////////////////////
 func PushSnippet(w http.ResponseWriter, req *http.Request) {
-
-	type Data struct {
-		Name    string `json:"name"`
-		User    string `json:"user"`
-		Private bool   `json:"priv"`
-		Desc    string `json:"desc"`
-		Code    string `json:"code"`
-		Token   string `json:"token"`
-	}
 
 	var data Data
 	_ = json.NewDecoder(req.Body).Decode(&data)
@@ -170,60 +182,87 @@ func PushSnippet(w http.ResponseWriter, req *http.Request) {
 	var user User
 	//Checks if the JWT is valed
 	user, err := DeconstructToken(data.Token)
-
+	// if invalid
 	if err != nil {
 		//Error in JWT
 		json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token"})
 
 	} else {
 		//JWT is valid
-		c := session.DB("sniper").C("sniper-snippets")
-
-		var OldSnippet Snippet
-		err = c.Find(bson.M{"name": data.Name, "user": data.User}).One(&OldSnippet)
-		//check if there is a snippet for the same name and user
-
-		if err == nil {
-			// no errors found aka snippet with same name and user already exists
-			fmt.Println("Duplicate snippet")
-
-			// check if the code is also same; if not update the code
-			if OldSnippet.Code == data.Code {
-				fmt.Println("Code is also same")
-				json.NewEncoder(w).Encode(Response{Success: false, Err: "Snippet already exists."})
-			} else {
-				selector := bson.M{"name": data.Name, "user": data.User}
-				change := bson.M{"$set": bson.M{"code": data.Code}}
-				err = c.Update(selector, change)
-
-				if err != nil {
-					json.NewEncoder(w).Encode(Response{Success: false, Err: "Could not update the snippet."})
-					fmt.Println("Error:", err)
-				} else {
-					json.NewEncoder(w).Encode(Response{Success: true, Info: "Snippet has been updated."})
-					fmt.Println("Snippet updated")
-				}
-			}
-		} else {
-			// error found, snippet doesnt exist
-			snippet := Snippet{Name: data.Name, User: user.User, Private: data.Private, Desc: data.Desc, Code: data.Code}
-
-			err := c.Insert(&snippet)
-
-			if err != nil {
-				json.NewEncoder(w).Encode(Response{Success: false, Err: err.Error()})
-				fmt.Println("Error:", err)
-			} else {
-				json.NewEncoder(w).Encode(Response{Success: true, Info: "Snippet has been saved on the server."})
-				fmt.Println("Snippet saved")
-			}
-		}
+		json.NewEncoder(w).Encode(PushSnippetHelper(data, user))
 	}
 
 	fmt.Println(data)
 
 }
 
+func PushAllEndPoint(w http.ResponseWriter, req *http.Request) {
+	// data will be received as
+
+}
+
+func PushSnippetHelper(data Data, user User) Response {
+	// this'll be called only if authentication token is valid
+	c := session.DB("sniper").C("sniper-snippets")
+	//check if there is a snippet for the same name and user
+	var oldData Snippet
+	err := c.Find(bson.M{"name": data.Name, "user": data.User}).One(&oldData)
+	// snippet with same name and user already exists
+	if err == nil {
+		// just comapare the time
+		// time of the received snippet
+		receivedTime, err := time.Parse("2006-01-02 15:04:05", data.Time)
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+		storedTime, err := time.Parse("2006-01-02 15:04:05", oldData.Time)
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+		if receivedTime.Equal(storedTime) {
+			fmt.Println("Snippet already exists.")
+			return Response{Success: false, Err: "Snippet already exists."}
+		} else {
+			// keep the snippet with greater time
+			if receivedTime.After(storedTime) {
+				selector := bson.M{"name": data.Name, "user": data.User}
+				change := bson.M{"$set": bson.M{"code": data.Code, "desc": data.Desc,
+					"exec": data.Exec, "time": data.Time}}
+				err = c.Update(selector, change)
+				if err != nil {
+					return Response{Success: false, Err: "Could not update the snippet."}
+					fmt.Println("Error:", err)
+				} else {
+					return Response{Success: true, Info: "Snippet has been updated."}
+					fmt.Println("Snippet updated")
+				}
+			} else {
+				fmt.Println("Snippet already exists with updated time.")
+				return Response{Success: false, Err: "Snippet already exists."}
+			}
+		}
+	} else {
+		// error found, snippet doesnt exist
+		snippet := Snippet{Name: data.Name, User: user.User, Private: data.Private, Desc: data.Desc,
+			Code: data.Code, Exec: data.Exec, Time: data.Time}
+
+		err := c.Insert(&snippet)
+
+		if err != nil {
+			return Response{Success: false, Err: err.Error()}
+			fmt.Println("Error:", err)
+		} else {
+			return Response{Success: true, Info: "Snippet has been saved on the server."}
+			fmt.Println("Snippet saved")
+		}
+	}
+	// control never reaches here
+	return Response{}
+}
+
+///////////////////////////////
+//////    PULL LOGIC    ///////
+///////////////////////////////
 func PullSnippet(w http.ResponseWriter, req *http.Request) {
 
 	type Data struct {
@@ -273,6 +312,13 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func PullAllEndPoint(w http.ResponseWriter, req *http.Request) {
+
+}
+
+///////////////////////////////
+////// HELPER FUNCTIONS ///////
+///////////////////////////////
 func DeconstructToken(JwtToken string) (User, error) {
 	token, _ := jwt.Parse(JwtToken, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

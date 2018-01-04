@@ -6,7 +6,13 @@ data  : 12/12/17
 """
 
 import json 
-from .constants import STORE
+
+import click
+
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from .constants import STORE, TOKEN_FILE, SIGNUP
+from .errors import ServerError
 
 def open_store():
     """
@@ -28,7 +34,7 @@ def save_store(data):
 
 def authenticate():
     """
-    authenticate  
+    For authenticating a client 
     """
     reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
             ' an account?')
