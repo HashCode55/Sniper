@@ -11,8 +11,8 @@ import click
 
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from .constants import STORE, TOKEN_FILE, SIGNUP
-from .errors import ServerError
+from .constants import STORE, TOKEN_FILE, SIGNUP, SIGNIN
+from .errors import ServerError, SniperError
 
 def open_store():
     """
@@ -31,6 +31,22 @@ def save_store(data):
     with open(STORE, 'w+') as d:
         json.dump(data, d) 
 
+def get_token_username():
+    # check whether the user has logged in or not 
+    with open(TOKEN_FILE) as t:
+        token = t.read()        
+    if token == '':        
+        authenticate()                        
+
+    # read again updated     
+    with open(TOKEN_FILE) as t:
+        token = t.read()            
+    token = token.split('\n')
+    if len(token) < 2:
+        raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
+    username = token[1]
+    token = token[0]
+    return token, username
 
 def authenticate():
     """

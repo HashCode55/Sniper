@@ -14,9 +14,9 @@ import subprocess
 from fuzzywuzzy import process
 
 from datetime import datetime
-from .utilities import open_store, save_store, authenticate, post 
+from .utilities import open_store, save_store, get_token_username, post 
 from .errors import NotImplementedError, SniperError, ServerError
-from .constants import POST_SNIPPET, PULL_SNIPPET, SIGNUP, SIGNIN, TOKEN_FILE, LJUST, POSTALL
+from .constants import POST_SNIPPET, PULL_SNIPPET, SIGNUP, SIGNIN, TOKEN_FILE, LJUST, POSTALL, PULLALL
 
 #### PRIORITY LEVEL - HIGH ####
 # TODO[DONE] remove parser, name desc and command in editore  
@@ -28,9 +28,10 @@ from .constants import POST_SNIPPET, PULL_SNIPPET, SIGNUP, SIGNIN, TOKEN_FILE, L
 # TODO[DONE] Docs 
 # TODO[DONE] Final refactoring
 # TODO[DONE] Store time and update server  
-# TODO push all pull all 
+# TODO pull all 
+# TODO Final refactoring and improve logging and errors 
 # TODO Test on multiple platforms 
-# TODO Final refactoring
+
 
 #### PRIORITY LEVEL - LOW ####
 # TODO storage structure change
@@ -286,8 +287,8 @@ def reset():
         click.echo('Successfully reset.')
 
 @sniper.command()
-@click.option('-s', help='Specific snippet to be pushed.')
-@click.option('-p', is_flag = True, help='To store the snippet as a private.')
+@click.option('-s', type=str, help='Specific snippet to be pushed.')
+@click.option('-p', is_flag = True, help='To store the specific snippet as a private.')
 def push(s, p):
     """
     Push all the snippets to cloud or just push a single snippet. 
@@ -300,30 +301,28 @@ def push(s, p):
     """        
     # get the data 
     data = open_store()                
+    if len(data) == 0: 
+        raise SniperError('No snippets to push.')
 
-    # check whether the user has logged in or not 
-    with open(TOKEN_FILE) as t:
-        token = t.read()        
-    if token == '':        
-        authenticate()                        
-
-    # read again updated     
-    with open(TOKEN_FILE) as t:
-        token = t.read()            
-    token = token.split('\n')
-    if len(token) < 2:
-        raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
-    username = token[1]
-    token = token[0]     
+    # get token and username 
+    token, username = get_token_username()     
     
     # by default it'll push all the snippets 
     if s == None:
+        # modify data to store name as 'NAME'
+        temp_data = [{'NAME':d} for d in data.keys()]
+        for td in temp_data:
+            td.update(data[td['NAME']])
         jdata = {
             'user': username,
-            'data': data,
+            'data': temp_data,
             'token': token
         }
-        post(jdata, POSTALL)
+        res = post(jdata, POSTALL)
+        if 'info' in res.keys():
+            click.echo(res['info'])
+        elif 'err' in res.keys():
+            raise ServerError(res['err'])    
         # finish
         return 
 
@@ -353,9 +352,9 @@ def push(s, p):
         click.echo('Saved on server.') 
     
 @sniper.command()
-@click.argument('snippet')
-@click.option('-user', default='', type=str, help='For getting other users\' public snippets.')
-def pull(snippet, user):
+@click.option('-s', type=str, help='Specific snippet to be pulled.')
+@click.option('-user', type=str, help='For getting other users\' public snippets.')
+def pull(s, user):
     """
     Get the snippet from the cloud. Use "sniper pull --help" for 
     more info.
@@ -364,8 +363,22 @@ def pull(snippet, user):
 
     - sniper pull <snippet-name>
     """    
+    # -user flag cannot be used alone 
+    if s == None and user != None: 
+        raise SniperError('Cannot pull all snippets of a different user.')
+    # pullall is used     
+    if s == None:     
+        token, username = get_token_username()
+        req = {
+            'user': username,
+            'token': token                
+        }
+        res = post()
+
+    ############### BELOW IS OLD CODE #################
+    
     # check if the user is specified 
-    if user != '':
+    if user != None:
         # simply get the data 
         req = {
             'user': user, 
@@ -374,19 +387,7 @@ def pull(snippet, user):
         }
         res = post(req, PULL_SNIPPET)
     else:            
-        # username is specified 
-        with open(TOKEN_FILE) as t:
-            token = t.read()        
-        if token == '':        
-            authenticate()       
-        # open again to read data after authentication     
-        with open(TOKEN_FILE) as t:
-            token = t.read()                
-        token = token.split('\n')
-        if len(token) < 2:
-            raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
-        username = token[1]
-        token = token[0]                
+        token, username = get_token_username()
         # cook the send the request 
         req = {
             'user': username,

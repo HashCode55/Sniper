@@ -46,7 +46,7 @@ type Snippet struct {
 	Private bool   `json:"priv"`
 	Desc    string `json:"desc"`
 	Code    string `json:"code"`
-	Exec    string `json:"exec"`
+	Exec    bool   `json:"exec"`
 	Time    string `json:"time"`
 }
 
@@ -70,7 +70,7 @@ type Data struct {
 	Desc    string `json:"desc"`
 	Code    string `json:"code"`
 	Token   string `json:"token"`
-	Exec    string `json:"exec"`
+	Exec    bool   `json:"exec"`
 	Time    string `json:"time"`
 }
 
@@ -83,7 +83,7 @@ var session *mgo.Session
 func MongoConnect() *mgo.Session {
 
 	// session, err := mgo.Dial("mongodb://<dbuser>:<dbpassword>@ds231987.mlab.com:31987/sniper")
-	session, err := mgo.Dial("mongodb://american-sniper:economyoverecology@ds231987.mlab.com:31987/sniper")
+	session, err := mgo.Dial("mongodb://snipertest:testsniper@ds125914.mlab.com:25914/sniper")
 	if err != nil {
 		panic(err)
 	} else {
@@ -198,7 +198,36 @@ func PushSnippet(w http.ResponseWriter, req *http.Request) {
 
 func PushAllEndPoint(w http.ResponseWriter, req *http.Request) {
 	// data will be received as
-
+	type Anon struct {
+		User string `json:"user"`
+		Data []struct {
+			Name string `json:"NAME"`
+			Desc string `json:"DESC"`
+			Code string `json:"CODE"`
+			Exec bool   `json:"EXEC"`
+			Time string `json:"TIME"`
+		} `json:"data"`
+		Token string `json:"token"`
+	}
+	// get the data from request
+	var anon Anon
+	_ = json.NewDecoder(req.Body).Decode(&anon)
+	// check the token
+	var user User
+	user, err := DeconstructToken(anon.Token)
+	if err != nil {
+		//Error in JWT
+		json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token"})
+	}
+	// now loop over snippets and push into the database
+	for _, snippet := range anon.Data {
+		// by default all snippets will be private
+		// ignore the response
+		_ = PushSnippetHelper(Data{snippet.Name, anon.User, true,
+			snippet.Desc, snippet.Code, anon.Token, snippet.Exec, snippet.Time}, user)
+	}
+	// send success message
+	json.NewEncoder(w).Encode(Response{Success: true, Info: "Successfully Synced."})
 }
 
 func PushSnippetHelper(data Data, user User) Response {
