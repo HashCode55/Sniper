@@ -52,7 +52,7 @@ type Snippet struct {
 
 type Response struct {
 	Success bool    `json:"success"`
-	Data    Snippet `json:"data"`
+	Data    []Snippet `json:"data"`
 	Info    string  `json:"info"`
 	Err     string  `json:"err"`
 }
@@ -311,7 +311,7 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
 	err := c.Find(bson.M{"name": data.Name, "user": data.User}).One(&snippet)
 
 	if err != nil {
-		json.NewEncoder(w).Encode(Response{Success: false, Err: "The requested snippet is either private or not found. #1"})
+		json.NewEncoder(w).Encode(Response{Success: false, Err: "The requested snippet is either private or not found."})
 		fmt.Println("Error:", err)
 		//Snippet Not Found
 	} else {
@@ -327,7 +327,7 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
 				} else {
 					if user.User == data.User {
 						//send private snippet
-						json.NewEncoder(w).Encode(Response{Success: true, Data: snippet})
+						json.NewEncoder(w).Encode(Response{Success: true, Data: []Snippet{ snippet }})
 					}
 				}
 			} else {
@@ -336,12 +336,52 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
 			}
 		} else {
 			//send public snippet
-			json.NewEncoder(w).Encode(Response{Success: true, Data: snippet})
+			json.NewEncoder(w).Encode(Response{Success: true, Data: []Snippet{ snippet }})
 		}
 	}
 }
 
 func PullAllEndPoint(w http.ResponseWriter, req *http.Request) {
+
+	type Data struct {
+		User  string `json:"user"`
+		Token string `json:"token"`
+	}
+
+	var data Data
+	_ = json.NewDecoder(req.Body).Decode(&data)
+
+	fmt.Println(data)
+
+	c := session.DB("sniper").C("sniper-snippets")
+
+	var snippets []Snippet
+	err := c.Find(bson.M{"user": data.User}).All(&snippets)
+
+	if err != nil {
+		json.NewEncoder(w).Encode(Response{Success: false, Err: "No snippets found."})
+		fmt.Println("Error:", err)
+		//Snippet Not Found
+	} else {
+		//Check for token
+		if data.Token != "" {
+			//Deconstruct token and match with the corrosponding username
+			var user User
+			user, err := DeconstructToken(data.Token)
+			fmt.Println(user)
+			if err != nil {
+				json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token."})
+			} else {
+				if user.User == data.User {
+					//send private snippet
+					json.NewEncoder(w).Encode(Response{Success: true, Data: snippets})
+				}
+			}
+		} else {
+			//Snippet found and authentication token not specified
+			json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token."})
+		}
+	}
 
 }
 
