@@ -14,41 +14,22 @@ import subprocess
 from fuzzywuzzy import process
 
 from datetime import datetime
-from .utilities import open_store, save_store, get_token_username, post 
+from .utilities import open_store, save_store, get_token_username, post, authenticate
 from .errors import NotImplementedError, SniperError, ServerError
 from .constants import POST_SNIPPET, PULL_SNIPPET, SIGNUP, SIGNIN, TOKEN_FILE, LJUST, POSTALL, PULLALL
-
-#### PRIORITY LEVEL - HIGH ####
-# TODO[DONE] remove parser, name desc and command in editore  
-# TODO[DONE] ls formatting 
-# TODO[DONE] Edit formatting  
-# TODO[DONE] Find 
-# TODO[DONE] Make an exec flag 
-# TODO[DONE] Tests 
-# TODO[DONE] Docs 
-# TODO[DONE] Final refactoring
-# TODO[DONE] Store time and update server  
-# TODO pull all 
-# TODO Final refactoring and improve logging and errors 
-# TODO Test on multiple platforms 
-
-
-#### PRIORITY LEVEL - LOW ####
-# TODO storage structure change
-# TODO Make find realtime
 
 @click.group()
 def sniper():
     """
-    Sniper is a simple snippet manager. To begin, try saving a snippet/command using the 
-    "new" command.
+    Sniper is a clould enabled, terminal based easy to use snippet manager.To begin, try saving a snippet/command 
+    using the "new" command.
 
     - sniper new
     """
     pass
 
 @sniper.command()
-@click.option('-e', default=False, is_flag=True, help='Provide this flag if the command/snippet is executable')
+@click.option('-e', default=False, is_flag=True, help='Provide this flag if the snippet is executable')
 @click.option('-t', default=False, is_flag=True)
 def new(e, t):
     """
@@ -58,32 +39,34 @@ def new(e, t):
 
     - sniper new 
     """
-    data = {}    
+    # open the default store 
+    data = open_store()        
     name = click.prompt('NAME')       
     if name == '':
-        raise SniperError('NAME cannot be empty')
-    desc = click.prompt('DESC')                 
-    name = name.strip()
+        raise SniperError('NAME cannot be empty')    
+    name = name.strip().lower()    
+    if name in data.keys():
+        raise SniperError('Snippet with this name already exists.')
+    desc = click.prompt('DESC')                     
     desc = desc.strip()
     # take the input through the editor 
     code = click.edit('') if not t else click.prompt('CODE')    
     code = code.strip()  
     # cook the data to be saved                 
     curtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    data = {
+    new_data = {
         name: {
             'DESC': desc, 
             'CODE': code, 
             'EXEC': e, 
             'TIME': curtime                 
         } 
-    }
-    # open the default store 
-    load = open_store()    
+    }    
     # update the store     
-    load.update(data)    
+    data.update(new_data)    
     # store the data 
-    save_store(load)
+    save_store(data)
+    click.echo('Snippet successfully saved.')
     
 @sniper.command()        
 @click.argument('snippet')
@@ -97,14 +80,15 @@ def get(snippet):
     """
     # open the json file 
     data = open_store()
+    snippet = snippet.strip().lower()
     # check if the given name exists 
     if not snippet in data.keys():
-        raise SniperError('No snipped exists with the name: ' + snippet)         
+        raise SniperError('No snippet exists with the name: ' + snippet)         
     try:    
         clipboard.copy(data[snippet]['CODE'])
-    except SniperError:
+    except:
         raise SniperError('Failed to copy to clipboard.')
-    click.echo('Code successfully copied to clipboard.')    
+    click.echo('Snippet successfully copied to clipboard.')    
 
 
 @sniper.command()
@@ -119,9 +103,10 @@ def rm(snippet):
     """    
     # open the json file 
     data = open_store()
+    snippet = snippet.strip().lower()
     # check if the snippet exists in keys 
     if not snippet in data.keys():
-        raise SniperError('No snipped exists with the name: ' + snippet)         
+        raise SniperError('No snippet exists with the name: ' + snippet)         
     else:
         data.pop(snippet)                       
     # save the new dict     
@@ -166,7 +151,8 @@ def cat(snippet):
 
     - sniper cat <snippet-name>
     """
-    data = open_store()        
+    data = open_store()  
+    snippet = snippet.strip().lower()      
     # check if the snippet exists in keys 
     if not snippet in data.keys():
         raise SniperError('No snippet exists with the name: ' + snippet)         
@@ -181,10 +167,11 @@ def edit(snippet, t):
     For editing the snippet 
     """    
     # get the data 
-    data = open_store()        
+    data = open_store()  
+    snippet = snippet.strip().lower()      
     # check if the snippet exists in keys 
     if not snippet in data.keys():
-        raise SniperError('No snipped exists with the name: ' + snippet)         
+        raise SniperError('No snippet exists with the name: ' + snippet)         
     
     # take the input parse it again and save a new file    
     new_name = click.prompt('NAME', default=snippet)
@@ -228,7 +215,10 @@ def find(query):
     """                                       
     # give preference to the name first 
     data = open_store()
+    query = query.strip().lower()
     names = list(data.keys())
+    if len(names) == 0: 
+        raise SniperError('No snippets saved.')        
     # merge key name and description just for searching 
     # putting it in dit for extraction 
     content = {(key + ' ' + data[key]['DESC']):key for key in data.keys()}
@@ -257,13 +247,14 @@ def find(query):
 @click.argument('snippet')
 def run(snippet):
     """
-    Executes the command if stored with "-e" flag.
+    Executes the command if stored with "-e" (executable) flag.
 
     USAGE 
     
     - sniper run <snippet-name>
     """        
-    data = open_store()                
+    data = open_store()   
+    snippet = snippet.strip().lower()             
     if not snippet in data.keys():
         raise SniperError('No snippet exists with the name: ' + snippet)
     if not data[snippet]['EXEC']:
@@ -273,7 +264,7 @@ def run(snippet):
         raise SniperError('Error running the snippet.')
 
 @sniper.command()
-def reset():
+def clear():
     """
     Removes all the snippets. 
 
@@ -287,16 +278,16 @@ def reset():
         click.echo('Successfully reset.')
 
 @sniper.command()
-@click.option('-s', type=str, help='Specific snippet to be pushed.')
-@click.option('-p', is_flag = True, help='To store the specific snippet as a private.')
+@click.option('-s', help='Name of specific snippet to be pushed.')
+@click.option('-p', is_flag = True, help='To store the specific snippet as private.')
 def push(s, p):
     """
-    Push all the snippets to cloud or just push a single snippet. 
-    Use "sniper push --help" for more info.
+    Store all the snippets or a single snippet on cloud.
 
     USAGE
 
     - sniper push 
+
     - sniper push -s=<snippet-name>
     """        
     # get the data 
@@ -305,7 +296,7 @@ def push(s, p):
         raise SniperError('No snippets to push.')
 
     # get token and username 
-    token, username = get_token_username()     
+    token, username = get_token_username(True)     
     
     # by default it'll push all the snippets 
     if s == None:
@@ -321,12 +312,13 @@ def push(s, p):
         res = post(jdata, POSTALL)
         if 'info' in res.keys():
             click.echo(res['info'])
-        elif 'err' in res.keys():
+        elif 'err' in res.keys() and res['err'] != '':
             raise ServerError(res['err'])    
         # finish
         return 
 
-    # logic for specific snippet    
+    # logic for specific snippet 
+    s = s.strip().lower()
     if not s in data.keys():
         raise SniperError('No snippet exists with the name: ' + s)
 
@@ -352,64 +344,92 @@ def push(s, p):
         click.echo('Saved on server.') 
     
 @sniper.command()
-@click.option('-s', type=str, help='Specific snippet to be pulled.')
-@click.option('-user', type=str, help='For getting other users\' public snippets.')
+@click.option('-s', type=str, help='Specific snippet to be retrieved.')
+@click.option('-user', type=str, help='For getting other users public snippets.')
 def pull(s, user):
     """
-    Get the snippet from the cloud. Use "sniper pull --help" for 
-    more info.
+    Get all the snippets or a single snippet from cloud.
 
     USAGE
 
     - sniper pull <snippet-name>
     """    
+    data = open_store()
     # -user flag cannot be used alone 
     if s == None and user != None: 
         raise SniperError('Cannot pull all snippets of a different user.')
     # pullall is used     
     if s == None:     
-        token, username = get_token_username()
+        token, username = get_token_username(False)
         req = {
             'user': username,
             'token': token                
         }
-        res = post()
-
-    ############### BELOW IS OLD CODE #################
-    
-    # check if the user is specified 
-    if user != None:
-        # simply get the data 
-        req = {
-            'user': user, 
-            'name': snippet,
-            'token': '',             
+        # response would be array of snippets 
+        res = post(req, PULLALL)
+        if 'err' in res.keys() and res['err'] != '':
+            raise ServerError(res['err'])
+        if res['data'] == None:
+            raise ServerError('No snippets saved on server.')    
+        for snippet in res['data']:
+            # check if already exists 
+            if snippet['name'] in data.keys():
+                # compare the time 
+                serversnip_time = datetime.strptime(snippet['time'], '%Y-%m-%d %H:%M:%S')    
+                localsnip_time = datetime.strptime(data[snippet['name']]['TIME'], '%Y-%m-%d %H:%M:%S')    
+                # ignore if equal or less 
+                if serversnip_time <= localsnip_time: continue                     
+            # else update the data 
+            new_data = {
+                snippet['name']: {
+                    'DESC': snippet['desc'], 
+                    'CODE': snippet['code'],
+                    'EXEC': snippet['exec'],
+                    'TIME': snippet['time']
+                }                        
+            }
+            data.update(new_data)    
+    else:        
+        s = s.strip().lower()
+        # snippet is specified            
+        # check if the user is specified 
+        if user != None:
+            # simply get the data 
+            req = {
+                'user': user, 
+                'name': s,
+                'token': '',             
+            }
+            res = post(req, PULL_SNIPPET)
+        # just snippet is specified     
+        else:            
+            token, username = get_token_username(False)
+            # cook the send the request 
+            req = {
+                'user': username,
+                'name': s, 
+                'token': token
+            }        
+            res = post(req, PULL_SNIPPET)
+        # check for errors 
+        if 'err' in res.keys() and res['err'] != '':
+            raise ServerError(res['err'])        
+        if len(res['data']) == 0:
+            raise ServerError('Error pulling from server. No snippets pulled.')
+        # save the snippet locally     
+        snippet = res['data'][0]
+        new_data = {
+            snippet['name']: {
+                'DESC': snippet['desc'], 
+                'CODE': snippet['code'],
+                'EXEC': snippet['exec'],
+                'TIME': snippet['time']
+            }
         }
-        res = post(req, PULL_SNIPPET)
-    else:            
-        token, username = get_token_username()
-        # cook the send the request 
-        req = {
-            'user': username,
-            'name': snippet, 
-            'token': token
-        }        
-        res = post(req, PULL_SNIPPET)
-
-    # get the data 
-    data = open_store()                
-    # save the snippet locally     
-    new_data = {
-        res['data']['name']: {
-            'DESC': res['data']['desc'], 
-            'CODE': res['data']['code'],
-            'EXEC': res['data']['exec'],
-            'TIME': res['data']['time']
-        }
-    }
-    data.update(new_data)    
+        data.update(new_data)    
+    # save the data finally     
     save_store(data)
-    click.echo('Snippet Successfully Saved.')
+    click.echo('Successfully pulled from server.')
 
 @sniper.command()
 def logout():
@@ -419,10 +439,24 @@ def logout():
     USAGE 
 
     - sniper logout
-    """
-    with open(TOKEN_FILE, 'w') as t:
-        t.write('')
+    """    
+    try:        
+        with open(TOKEN_FILE, 'w') as t:
+            t.write('')
+    except:
+        raise SniperError('Error opening the credentials file.')            
     click.echo('Successfully signed out.')    
+
+@sniper.command()
+def login():
+    """
+    Login to sniper 
+
+    USAGE 
+
+    - sniper login
+    """    
+    authenticate(True)
 
 @sniper.command()
 def whoami():
@@ -433,13 +467,16 @@ def whoami():
 
     - sniper whoami
     """
-    with open(TOKEN_FILE) as t:
-            token = t.read()                
+    try:
+        with open(TOKEN_FILE) as t:
+            token = t.read()        
+    except:
+        raise SniperError('Error reading the credentials file.')            
     if token == '':
         raise SniperError('You are currently not logged in.')
     token = token.split('\n')
     if len(token) < 2:
-        raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
+        raise SniperError('Credentials file is corrupt. Please report this issue on Github.')
     click.echo(token[1])    
 
 ####           IMPLEMENT THIS LATER            ####

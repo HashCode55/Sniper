@@ -1,7 +1,6 @@
 import setuptools
 from sniper.version import Version
 
-
 setuptools.setup(name='Sniper',
                  version=Version('1.0.0').number,
                  description='Snipe the Snippet',
@@ -13,7 +12,8 @@ setuptools.setup(name='Sniper',
                  install_requires=[
                      'Click',
                      'clipboard',
-                     'fuzzywuzzy'
+                     'fuzzywuzzy', 
+                     'python-Levenshtein'
                  ],
                  entry_points='''
                     [console_scripts]

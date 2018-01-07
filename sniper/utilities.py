@@ -18,8 +18,11 @@ def open_store():
     """
     Opens the json file and returns the data as dict object 
     """
-    with open(STORE) as d:
-        data = json.load(d) 
+    try:
+        with open(STORE) as d:
+            data = json.load(d) 
+    except:
+        raise SniperError('Cannot load data.')            
     return data           
 
 def save_store(data):    
@@ -28,15 +31,24 @@ def save_store(data):
 
     params@data: The dict object to be stored 
     """
-    with open(STORE, 'w+') as d:
-        json.dump(data, d) 
+    try:
+        with open(STORE, 'w+') as d:
+            json.dump(data, d) 
+    except:
+        raise SniperError('Cannot save data.')            
 
-def get_token_username():
+def get_token_username(register):
+    """
+    Extracts the token and username from TOKEN_FILE
+    """
     # check whether the user has logged in or not 
-    with open(TOKEN_FILE) as t:
-        token = t.read()        
+    try:
+        with open(TOKEN_FILE) as t:
+            token = t.read()        
+    except:
+        raise SniperError('Error reading the credentials file.')            
     if token == '':        
-        authenticate()                        
+        authenticate(register)                        
 
     # read again updated     
     with open(TOKEN_FILE) as t:
@@ -48,30 +60,36 @@ def get_token_username():
     token = token[0]
     return token, username
 
-def authenticate():
+def authenticate(register):
     """
     For authenticating a client 
     """
-    reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
-            ' an account?')
-    if not reg:
-        # get the username and password 
-        yes = click.confirm('Well! Why not create one? Press y to confirm.')
-        # fuck you, user 
-        if not yes: exit(1) 
-        username = click.prompt('Username', type=str)                        
-        password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
-        # sweet password check 
-        if len(password) < 8:
-            while len(password) < 8:
-                click.echo('Password must be atleast of 8 characters.')
-                password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
-        res = post({'user': username, 'pass': password}, SIGNUP)                        
-    else: 
+    if register:
+        reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
+                ' an account?')
+        if not reg:
+            # get the username and password 
+            yes = click.confirm('Well! Why not create one? Press y to confirm.')
+            # fuck you, user 
+            if not yes: exit(1) 
+            username = click.prompt('Username', type=str)                        
+            password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
+            # sweet password check 
+            if len(password) < 8:
+                while len(password) < 8:
+                    click.echo('Password must be atleast of 8 characters.')
+                    password = click.prompt('Password', type=str, hide_input=True, confirmation_prompt=True)
+            res = post({'user': username, 'pass': password}, SIGNUP)                        
+        else: 
+            username = click.prompt('Username', type=str)
+            password = click.prompt('Password', type=str, hide_input=True)
+            res = post({'user': username, 'pass': password}, SIGNIN)
+    else:
+        click.echo('Login to your account to pull.')
         username = click.prompt('Username', type=str)
         password = click.prompt('Password', type=str, hide_input=True)
         res = post({'user': username, 'pass': password}, SIGNIN)
-    
+
     if 'token' in res.keys() and res['token'] != '':
         # store the token 
         token = res['token']

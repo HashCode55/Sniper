@@ -1,2 +1,6 @@
-pytest
-pytest-cov
+click==6.7
+clipboard==0.0.4
+fuzzywuzzy==0.15.1
+pyperclip==1.6.0
+python-Levenshtein==0.12.0
+-e git+https://github.com/HashCode55/Sniper@79628bee3dcb4c83820d340f1ed443d331143dc2#egg=Sniper

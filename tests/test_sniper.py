@@ -18,22 +18,22 @@ class TestSniperClientCommands(unittest.TestCase):
 	runner.invoke(sniper, ['new', '-t', '-e'], input='test_run\ntest_desc\nls')
 
 	def test_new(self):	
-		result = self.runner.invoke(sniper, ['new', '-t'], input='test_name\ntest_desc\ntest_code')				
+		result = self.runner.invoke(sniper, ['new', '-t'], input='test_new\ntest_desc\ntest_code')				
 		assert result.exit_code == 0
 		# check if the test snippet has been inserted or not
-		result = self.runner.invoke(sniper, ['get', 'test_name'])	    	    
+		result = self.runner.invoke(sniper, ['get', 'test_new'])	    	    
 		assert result.exit_code == 0
-		assert 'Code successfully copied to clipboard.' in result.output	    
+		assert 'Snippet successfully copied to clipboard.' in result.output	    
 
 	def test_get(self):	    	   
 	    result = self.runner.invoke(sniper, ['get', 'test_name'])	    	    
 	    assert result.exit_code == 0
-	    assert 'Code successfully copied to clipboard.' in result.output
+	    assert 'Snippet successfully copied to clipboard.' in result.output
 
 	def test_get_fail(self):		
 		result = self.runner.invoke(sniper, ['get', 'ls not'])	    		
 		assert result.exit_code == 1		
-		assert 'No snipped exists' in result.output
+		assert 'No snippet exists' in result.output
 
 	def test_ls(self):
 		result = self.runner.invoke(sniper, ['ls'])
@@ -68,9 +68,6 @@ class TestSniperClientCommands(unittest.TestCase):
 		assert 'Snippet successfully deleted.' in result.output
 		result = self.runner.invoke(sniper, ['cat', 'test_name'])
 		assert 'No snippet exists' in result.output
-
-class TestSniperServerCommands(unittest.TestCase):	
-	pass 
-
+		
 if __name__ == '__main__':
 	unittest.main()

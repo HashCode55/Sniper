@@ -1,7 +1,7 @@
 /*
  * Run the server from here bitch.
  *
- * author: HashCode55
+ * author: HashCode55, exogenesys
  * date  : 13/12/2017
  */
 
@@ -10,11 +10,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	// "os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -51,10 +51,10 @@ type Snippet struct {
 }
 
 type Response struct {
-	Success bool    `json:"success"`
+	Success bool      `json:"success"`
 	Data    []Snippet `json:"data"`
-	Info    string  `json:"info"`
-	Err     string  `json:"err"`
+	Info    string    `json:"info"`
+	Err     string    `json:"err"`
 }
 
 type SignUpResponse struct {
@@ -79,6 +79,7 @@ func (s *Snippet) String() string {
 }
 
 var session *mgo.Session
+var debug *bool
 
 func MongoConnect() *mgo.Session {
 
@@ -87,7 +88,7 @@ func MongoConnect() *mgo.Session {
 	if err != nil {
 		panic(err)
 	} else {
-		fmt.Println("Mon is go")
+		log.Println("Mon is go")
 		// defer session.Close()
 	}
 
@@ -95,10 +96,13 @@ func MongoConnect() *mgo.Session {
 }
 
 func main() {
-
+	// debug flags
+	debug = flag.Bool("debug", false, "debug flag")
+	// parse the flags
+	flag.Parse()
 	router := mux.NewRouter()
 	session = MongoConnect()
-	fmt.Println("Starting the application...")
+	log.Println("Starting the application...")
 	router.HandleFunc("/push", PushSnippet).Methods("POST")
 	router.HandleFunc("/pull", PullSnippet).Methods("POST")
 	router.HandleFunc("/signup", SignUpEndPoint).Methods("POST")
@@ -114,19 +118,20 @@ func SignUpEndPoint(w http.ResponseWriter, req *http.Request) {
 	var user User
 	_ = json.NewDecoder(req.Body).Decode(&user)
 
+	log.Println("Received a signup request.")
+
 	u := session.DB("sniper").C("sniper-users")
 
 	var OldUser User
 	err := u.Find(bson.M{"user": user.User}).One(&OldUser)
 	if err != nil {
-
 		NewPass := HashPassword(user.Pass)
-
-		fmt.Println(NewPass)
 		NewUser := User{User: user.User, Pass: NewPass}
 		err := u.Insert(&NewUser)
 		if err != nil {
 			//error inserting user
+			log.Println("Error:", err)
+			json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Error saving info."})
 		} else {
 			tokenString, error := ConstructToken(user.User, NewPass)
 			if error != nil {
@@ -135,11 +140,9 @@ func SignUpEndPoint(w http.ResponseWriter, req *http.Request) {
 				json.NewEncoder(w).Encode(SignUpResponse{Success: true, Token: tokenString})
 			}
 		}
-
 	} else {
 		json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Username Already Exists"})
 	}
-
 }
 
 func SignInEndPoint(w http.ResponseWriter, req *http.Request) {
@@ -147,15 +150,17 @@ func SignInEndPoint(w http.ResponseWriter, req *http.Request) {
 	var user User
 	_ = json.NewDecoder(req.Body).Decode(&user)
 
+	log.Println("Received a signin request.")
+
 	u := session.DB("sniper").C("sniper-users")
 
 	var OldUser User
 	err := u.Find(bson.M{"user": user.User}).One(&OldUser)
 	if err != nil {
+		log.Println("Error:", err)
 		json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Wrong Credentials"})
 	} else {
 		NewPass := HashPassword(user.Pass)
-
 		if NewPass == OldUser.Pass {
 			tokenString, error := ConstructToken(user.User, NewPass)
 			if error != nil {
@@ -166,9 +171,7 @@ func SignInEndPoint(w http.ResponseWriter, req *http.Request) {
 		} else {
 			json.NewEncoder(w).Encode(SignUpResponse{Success: false, Err: "Wrong Credentials"})
 		}
-
 	}
-
 }
 
 ///////////////////////////////
@@ -178,7 +181,10 @@ func PushSnippet(w http.ResponseWriter, req *http.Request) {
 
 	var data Data
 	_ = json.NewDecoder(req.Body).Decode(&data)
-
+	log.Println("Pushing a single snippet...")
+	if *debug {
+		log.Panicln("[DEBUG] Data: ", data)
+	}
 	var user User
 	//Checks if the JWT is valed
 	user, err := DeconstructToken(data.Token)
@@ -186,14 +192,10 @@ func PushSnippet(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		//Error in JWT
 		json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token"})
-
 	} else {
 		//JWT is valid
 		json.NewEncoder(w).Encode(PushSnippetHelper(data, user))
 	}
-
-	fmt.Println(data)
-
 }
 
 func PushAllEndPoint(w http.ResponseWriter, req *http.Request) {
@@ -209,6 +211,7 @@ func PushAllEndPoint(w http.ResponseWriter, req *http.Request) {
 		} `json:"data"`
 		Token string `json:"token"`
 	}
+	log.Println("Pushing all snippets...")
 	// get the data from request
 	var anon Anon
 	_ = json.NewDecoder(req.Body).Decode(&anon)
@@ -227,7 +230,7 @@ func PushAllEndPoint(w http.ResponseWriter, req *http.Request) {
 			snippet.Desc, snippet.Code, anon.Token, snippet.Exec, snippet.Time}, user)
 	}
 	// send success message
-	json.NewEncoder(w).Encode(Response{Success: true, Info: "Successfully Synced."})
+	json.NewEncoder(w).Encode(Response{Success: true, Info: "Successfully pushed all snippets."})
 }
 
 func PushSnippetHelper(data Data, user User) Response {
@@ -242,14 +245,14 @@ func PushSnippetHelper(data Data, user User) Response {
 		// time of the received snippet
 		receivedTime, err := time.Parse("2006-01-02 15:04:05", data.Time)
 		if err != nil {
-			fmt.Println("Error:", err)
+			log.Println("Error:", err)
 		}
 		storedTime, err := time.Parse("2006-01-02 15:04:05", oldData.Time)
 		if err != nil {
-			fmt.Println("Error:", err)
+			log.Println("Error:", err)
 		}
 		if receivedTime.Equal(storedTime) {
-			fmt.Println("Snippet already exists.")
+			log.Println("Snippet already exists.")
 			return Response{Success: false, Err: "Snippet already exists."}
 		} else {
 			// keep the snippet with greater time
@@ -260,13 +263,13 @@ func PushSnippetHelper(data Data, user User) Response {
 				err = c.Update(selector, change)
 				if err != nil {
 					return Response{Success: false, Err: "Could not update the snippet."}
-					fmt.Println("Error:", err)
+					log.Println("Error:", err)
 				} else {
 					return Response{Success: true, Info: "Snippet has been updated."}
-					fmt.Println("Snippet updated")
+					log.Println("Snippet updated")
 				}
 			} else {
-				fmt.Println("Snippet already exists with updated time.")
+				log.Println("Snippet already exists with updated time.")
 				return Response{Success: false, Err: "Snippet already exists."}
 			}
 		}
@@ -279,10 +282,10 @@ func PushSnippetHelper(data Data, user User) Response {
 
 		if err != nil {
 			return Response{Success: false, Err: err.Error()}
-			fmt.Println("Error:", err)
+			log.Println("Error:", err)
 		} else {
 			return Response{Success: true, Info: "Snippet has been saved on the server."}
-			fmt.Println("Snippet saved")
+			log.Println("Snippet saved")
 		}
 	}
 	// control never reaches here
@@ -303,7 +306,10 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
 	var data Data
 	_ = json.NewDecoder(req.Body).Decode(&data)
 
-	fmt.Println(data)
+	log.Println("Pull a snippet.")
+	if *debug {
+		log.Println("[DEBUG] Data: ", data)
+	}
 
 	c := session.DB("sniper").C("sniper-snippets")
 
@@ -312,8 +318,7 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
 
 	if err != nil {
 		json.NewEncoder(w).Encode(Response{Success: false, Err: "The requested snippet is either private or not found."})
-		fmt.Println("Error:", err)
-		//Snippet Not Found
+		log.Println("Error:", err)
 	} else {
 		if snippet.Private {
 			//Snippet found but is private
@@ -321,22 +326,21 @@ func PullSnippet(w http.ResponseWriter, req *http.Request) {
 				//Deconstruct token and match with the corrosponding username
 				var user User
 				user, err := DeconstructToken(data.Token)
-				fmt.Println(user)
 				if err != nil {
 					json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token"})
 				} else {
 					if user.User == data.User {
 						//send private snippet
-						json.NewEncoder(w).Encode(Response{Success: true, Data: []Snippet{ snippet }})
+						json.NewEncoder(w).Encode(Response{Success: true, Data: []Snippet{snippet}})
 					}
 				}
 			} else {
 				//Snippet found and authentication token not specified
-				json.NewEncoder(w).Encode(Response{Success: false, Err: "The requested snippet is either private or not found. #2"})
+				json.NewEncoder(w).Encode(Response{Success: false, Err: "The requested snippet is either private or not found."})
 			}
 		} else {
 			//send public snippet
-			json.NewEncoder(w).Encode(Response{Success: true, Data: []Snippet{ snippet }})
+			json.NewEncoder(w).Encode(Response{Success: true, Data: []Snippet{snippet}})
 		}
 	}
 }
@@ -351,8 +355,6 @@ func PullAllEndPoint(w http.ResponseWriter, req *http.Request) {
 	var data Data
 	_ = json.NewDecoder(req.Body).Decode(&data)
 
-	fmt.Println(data)
-
 	c := session.DB("sniper").C("sniper-snippets")
 
 	var snippets []Snippet
@@ -360,7 +362,7 @@ func PullAllEndPoint(w http.ResponseWriter, req *http.Request) {
 
 	if err != nil {
 		json.NewEncoder(w).Encode(Response{Success: false, Err: "No snippets found."})
-		fmt.Println("Error:", err)
+		log.Println("Error:", err)
 		//Snippet Not Found
 	} else {
 		//Check for token
@@ -368,7 +370,7 @@ func PullAllEndPoint(w http.ResponseWriter, req *http.Request) {
 			//Deconstruct token and match with the corrosponding username
 			var user User
 			user, err := DeconstructToken(data.Token)
-			fmt.Println(user)
+			log.Println(user)
 			if err != nil {
 				json.NewEncoder(w).Encode(Response{Success: false, Err: "Invalid Authorization Token."})
 			} else {
@@ -411,7 +413,7 @@ func ConstructToken(username string, pass string) (string, error) {
 	})
 	tokenString, error := token.SignedString([]byte("secret"))
 	if error != nil {
-		fmt.Println(error)
+		log.Println(error)
 		return "", error
 	} else {
 		return tokenString, nil

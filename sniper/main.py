@@ -14,7 +14,7 @@ from .constants import PATH, STORE, TOKEN_FILE
 def run (): 
     """
     Create a config file or ignore if it's 
-    """            
+    """                
     # check if there is a directory         
     if not os.path.exists(PATH):
         print ('made a directory')
