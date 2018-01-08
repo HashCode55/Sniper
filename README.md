@@ -7,11 +7,16 @@ Sniper is a clould enabled, terminal based easy to use snippet manager.
 
 # Getting Started
 ### Installation 
+
 *Currently, sniper is shipped only via `pip`.*
+
+**Prerequisites**
+
+- Python3.x
 
 **OS X**
 
-`pip install sniper`
+`pip install pysniper`
 
 **Linux**
 
@@ -21,15 +26,15 @@ On linux you need to install `xsel` for sniper to work properly
 
 Then just install via `pip`
 
-`pip install sniper`
+`pip install pysniper`
 
 If there is a permission error use 
 
-`pip install --user sniper`
+`pip install --user pysniper`
 
 **Windows**
 
-`pip install sniper`
+`pip install pysniper`
 
 ### Usage
 
