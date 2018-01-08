@@ -65,8 +65,7 @@ def authenticate(register):
     For authenticating a client 
     """
     if register:
-        reg = click.confirm('Dang! You are not an authorized sniper :( Do you already have' + 
-                ' an account?')
+        reg = click.confirm('Do you already have an account?')
         if not reg:
             # get the username and password 
             yes = click.confirm('Well! Why not create one? Press y to confirm.')
@@ -85,7 +84,7 @@ def authenticate(register):
             password = click.prompt('Password', type=str, hide_input=True)
             res = post({'user': username, 'pass': password}, SIGNIN)
     else:
-        click.echo('Login to your account to pull.')
+        # click.echo('Login to your account to pull.')
         username = click.prompt('Username', type=str)
         password = click.prompt('Password', type=str, hide_input=True)
         res = post({'user': username, 'pass': password}, SIGNIN)

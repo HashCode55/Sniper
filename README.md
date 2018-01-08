@@ -1,4 +1,8 @@
-# Sniper 
+<p align="center"> 
+	<img src="sniper-circle.png">	
+</p>
+
+# What it is?
 Sniper is a clould enabled, terminal based easy to use snippet manager.
 
 # Getting Started
@@ -19,6 +23,10 @@ Then just install via `pip`
 
 `pip install sniper`
 
+If there is a permission error use 
+
+`pip install --user sniper`
+
 **Windows**
 
 `pip install sniper`
@@ -29,19 +37,19 @@ Then just install via `pip`
 
 	***Note:*** *To store the snippet as an executable use `-e` flag.*
 
-<img src="new_command.gif">
+	<img src="new_command.gif">
 
 - Other commands - `ls`, `cat`, `rm`
 
-<img src="ls_cat_rm.gif">
+	<img src="ls_cat_rm.gif">
 
-- To get the snippet on clipboard, use `get` duh. 
+- To get the snippet on clipboard, use `get` duh. If the name has spaces, put it in double 		quotes.
 
 	`sniper get [snippet-name]`
 
 - To find a snippet, use the `find` command 
 	
-	`sniper find [query]`
+	`sniper find [query-string]`
 
 - You can edit the snippet using `edit`
 
@@ -76,7 +84,7 @@ Basically Sniper uses two basic commands to store and retrieve snippets - `push`
 
 	**Use `sniper pull --help` for more info.**
 
-<img src="push_pull.gif">
+	<img src="push_pull.gif">
 
 ***Note*** -  *You need to signup/signin to store the snippets on server*
 
@@ -98,28 +106,43 @@ Sniper would love contributions! To set up the development environment follow th
 
 **Prerequisites**
 - Python3.x
+- `sudo apt-get install xsel` (For linux)
+- Golang 1.7 and above (for running the server locally)
 
+**Steps**
 1. Fork and clone the project.
 2. Open you terminal and download `virtualenv` using `pip` if you don't have it already. 
 
 	`pip install virtualenv`
+
 3. `cd` into cloned project and create a virtual environment
 
-	`virtualenv -p python3 venv`	
+	`virtualenv -p python3 venv`
+
 4. Activate the environment.
 
-	On OSX/Posix based systems it's as simple as 
+	On OSX/Linux it's as simple as 
 
 	`source venv/bin/activate`
 
 	For Windows 
 
-	`venv/Scripts/activate.bat`
-
+	`venv\Scripts\activate.bat`
 
 5. Install sniper in the virtual environment 
 
-`pip install --editable .`
+	`pip install --editable .` 
+
+	Don't forget the `.`! 
+
+**For running the server locally**
+1. Open `sniper/constants.py`, comment the production section and uncomment the testing 		section.
+
+2. cd into `server` directory.
+
+3. Run `go run main.go` and voila! You are running the Sniper Server.  
+
+After making the changes locally, push them in your forked repository and make a pull request :) 
 
 **Tests**
 
@@ -127,12 +150,15 @@ Just run `./script/test`
 
 # Todo
 
- - More testing and tests
+ - More testing and tests (including server tests)
  - Make find realtime
  - Change editor functionality
  - Create a web interface to view public snippets
  - Improve docs 
+ - Support regex in find query
  - Windows `python-Levenshtein` dependency fix
+ - Ship through multiple package managers
+ - Autocomplete
  
 # License
 

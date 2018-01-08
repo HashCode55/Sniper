@@ -1,3 +1,10 @@
+"""
+Setup file
+
+author: HashCode55
+data  : 09/12/2017
+"""
+
 import setuptools
 from sniper.version import Version
 
@@ -20,8 +27,7 @@ setuptools.setup(name='Sniper',
                     sniper = sniper.main:run
                  ''',
                  license='MIT License',
-                 zip_safe=False,                 
-                 classifiers=['Packages', 'Boilerplate'])
+                 zip_safe=False)
 
 
 

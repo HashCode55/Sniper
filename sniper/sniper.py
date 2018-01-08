@@ -90,7 +90,6 @@ def get(snippet):
         raise SniperError('Failed to copy to clipboard.')
     click.echo('Snippet successfully copied to clipboard.')    
 
-
 @sniper.command()
 @click.argument('snippet')
 def rm(snippet):
@@ -259,7 +258,10 @@ def run(snippet):
         raise SniperError('No snippet exists with the name: ' + snippet)
     if not data[snippet]['EXEC']:
         raise SniperError('Snippet not executable.')
-    exitcode = subprocess.call(data[snippet]['CODE'].split(' '))    
+    if os.name == 'nt':
+        exitcode = subprocess.call(data[snippet]['CODE'].split(' '), shell=True)        
+    else:
+        exitcode = subprocess.call(data[snippet]['CODE'].split(' '))    
     if exitcode != 0: 
         raise SniperError('Error running the snippet.')
 
@@ -272,7 +274,7 @@ def clear():
 
     - sniper reset 
     """
-    res = click.confirm('Are you sure you want to remove all the snippets?')
+    res = click.confirm('Are you sure you want to remove all the snippets locally?')
     if res:
         save_store({})
         click.echo('Successfully reset.')
@@ -394,12 +396,30 @@ def pull(s, user):
         # snippet is specified            
         # check if the user is specified 
         if user != None:
+            # check if specified username is same as logged in user 
+            with open(TOKEN_FILE) as t:
+                token = t.read()
+            req_set = False   
+            if token != '':
+                token = token.split('\n')
+                if len(token) < 2:
+                    raise SniperError('Credentials File is Corrupt. Please report this issue on Github.')
+                username = token[1]
+                token = token[0]
+                if username == user:                    
+                    req = {
+                        'user': username,
+                        'name': s, 
+                        'token': token
+                    }  
+                    req_set = True      
             # simply get the data 
-            req = {
-                'user': user, 
-                'name': s,
-                'token': '',             
-            }
+            if not req_set:
+                req = {
+                    'user': user, 
+                    'name': s,
+                    'token': '',             
+                }
             res = post(req, PULL_SNIPPET)
         # just snippet is specified     
         else:            

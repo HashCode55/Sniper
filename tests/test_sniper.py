@@ -24,6 +24,8 @@ class TestSniperClientCommands(unittest.TestCase):
 		result = self.runner.invoke(sniper, ['get', 'test_new'])	    	    
 		assert result.exit_code == 0
 		assert 'Snippet successfully copied to clipboard.' in result.output	    
+		result = self.runner.invoke(sniper, ['rm', 'test_new'])
+		assert result.exit_code == 0
 
 	def test_get(self):	    	   
 	    result = self.runner.invoke(sniper, ['get', 'test_name'])	    	    
@@ -64,7 +66,7 @@ class TestSniperClientCommands(unittest.TestCase):
 
 	def test_rm(self):
 		result = self.runner.invoke(sniper, ['rm', 'test_name'])
-		assert result.exit_code == 0
+		assert result.exit_code == 0		
 		assert 'Snippet successfully deleted.' in result.output
 		result = self.runner.invoke(sniper, ['cat', 'test_name'])
 		assert 'No snippet exists' in result.output
